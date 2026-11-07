@@ -65,6 +65,11 @@ struct audio_pipeline {
     int have_rtp;
     uint32_t next_rtp;         /* RTP timestamp expected for the next packet */
     uint64_t concealed;
+    uint64_t in_ts_ns;  /* sender time of the first sample of the current input, 0 if unknown */
+    size_t in_pos;      /* samples of the current input queued so far */
+    uint64_t block_ts_ns; /* sender time of the current FLAC block's first sample */
+    size_t drop_frames;    /* upcoming samples to drop (audio_shift: play sooner) */
+    size_t insert_frames;  /* silence to insert before the next packet (play later) */
 };
 
 static void close_decoder(audio_pipeline *p) {
@@ -176,6 +181,7 @@ static void mix_preview(audio_pipeline *p, int16_t *pcm, size_t frames) {
 
 void audio_reset(audio_pipeline *p) {
     p->pcm_frames = 0;
+    p->drop_frames = p->insert_frames = 0;
     p->have_rtp = 0;
     if (p->dec) avcodec_flush_buffers(p->dec);
 }
@@ -208,10 +214,27 @@ int audio_set_format(audio_pipeline *p, unsigned ct) {
 }
 
 /* Appends interleaved s16 frames, emitting a FLAC frame per full block. */
+/* Sets the sender time of the input about to be queued. */
+static void set_input_time(audio_pipeline *p, uint64_t ts_ns) {
+    p->in_ts_ns = ts_ns;
+    p->in_pos = 0;
+}
+
 static void queue_pcm(audio_pipeline *p, const int16_t *pcm, size_t frames) {
+    if (p->drop_frames > 0) {
+        size_t skip = p->drop_frames < frames ? p->drop_frames : frames;
+        p->drop_frames -= skip;
+        p->in_pos += skip; /* the sender time moves on past them */
+        pcm += skip * CHANNELS;
+        frames -= skip;
+    }
     while (frames > 0) {
         size_t take = FLAC_BLOCK - p->pcm_frames;
         if (take > frames) take = frames;
+        if (p->pcm_frames == 0) {
+            p->block_ts_ns = p->in_ts_ns ? p->in_ts_ns + p->in_pos * 1000000000ull / RATE : 0;
+        }
+        p->in_pos += take;
         memcpy(p->pcm + p->pcm_frames * CHANNELS, pcm, take * CHANNELS * sizeof *pcm);
         mix_preview(p, p->pcm + p->pcm_frames * CHANNELS, take);
         p->pcm_frames += take;
@@ -219,7 +242,7 @@ static void queue_pcm(audio_pipeline *p, const int16_t *pcm, size_t frames) {
         frames -= take;
         if (p->pcm_frames == FLAC_BLOCK) {
             size_t len = flac_write_frame(p->flac_buf, p->flac_frame++, RATE, CHANNELS, p->pcm);
-            fmp4_audio_push(p->mux, p->flac_buf, len, FLAC_BLOCK);
+            fmp4_audio_push(p->mux, p->flac_buf, len, FLAC_BLOCK, p->block_ts_ns);
             p->pcm_frames = 0;
         }
     }
@@ -261,10 +284,9 @@ static void queue_frame(audio_pipeline *p, const AVFrame *f) {
 
 uint64_t audio_concealed(const audio_pipeline *p) { return p->concealed; }
 
-/* Fills a gap of `frames` lost samples with silence. */
-static void conceal(audio_pipeline *p, size_t frames) {
+/* Queues `frames` of silence. */
+static void queue_silence(audio_pipeline *p, size_t frames) {
     static const int16_t zeros[512 * CHANNELS];
-    p->concealed += frames;
     while (frames > 0) {
         size_t n = frames > 512 ? 512 : frames;
         queue_pcm(p, zeros, n);
@@ -272,18 +294,45 @@ static void conceal(audio_pipeline *p, size_t frames) {
     }
 }
 
-void audio_push(audio_pipeline *p, const uint8_t *data, size_t len, uint32_t rtp_time) {
+/* Fills a gap of `frames` lost samples with silence. */
+static void conceal(audio_pipeline *p, size_t frames) {
+    p->concealed += frames;
+    queue_silence(p, frames);
+}
+
+void audio_shift(audio_pipeline *p, int ms) {
+    size_t frames = (size_t)(ms < 0 ? -ms : ms) * RATE / 1000;
+    if (ms > 0) {
+        p->drop_frames += frames;
+    } else {
+        p->insert_frames += frames;
+    }
+}
+
+void audio_push(audio_pipeline *p, const uint8_t *data, size_t len, uint32_t rtp_time, uint64_t ts_ns) {
     size_t frames = 0;
     if (!p->ct || len == 0) return;
     if (p->ct == 4) {
-        fmp4_audio_push(p->mux, data, len, AAC_LC_FRAME);
+        fmp4_audio_push(p->mux, data, len, AAC_LC_FRAME, ts_ns);
         return;
     }
     if (p->have_rtp) {
         int32_t gap = (int32_t)(rtp_time - p->next_rtp);
         if (gap < 0 && gap > -MAX_CONCEAL) return; /* late or duplicate: already covered */
-        if (gap > 0 && gap <= MAX_CONCEAL) conceal(p, (size_t)gap);
+        if (gap > 0 && gap <= MAX_CONCEAL) {
+            uint64_t gap_ns = (uint64_t)gap * 1000000000ull / RATE;
+            set_input_time(p, ts_ns > gap_ns ? ts_ns - gap_ns : 0);
+            conceal(p, (size_t)gap);
+        }
     }
+    if (p->insert_frames > 0) {
+        /* audio_shift asked to play later: silence that sits before this packet */
+        uint64_t ins_ns = (uint64_t)p->insert_frames * 1000000000ull / RATE;
+        set_input_time(p, ts_ns > ins_ns ? ts_ns - ins_ns : 0);
+        queue_silence(p, p->insert_frames);
+        p->insert_frames = 0;
+    }
+    set_input_time(p, ts_ns);
     if (p->ct == 1) {
         frames = len / (CHANNELS * sizeof(int16_t));
         queue_pcm(p, (const int16_t *)data, frames);

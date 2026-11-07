@@ -32,11 +32,12 @@ const STALL_MS = 2500;
 const BACK_BUFFER_S = 10;
 const TRIM_EVERY_MS = 5000;
 
-// Audio latency cap: if the audio player falls more than AUDIO_MAX_AHEAD_MS
-// behind the newest audio for AUDIO_LATE_CHECKS checks in a row (1 s apart),
-// its playhead jumps to AUDIO_TARGET_AHEAD_MS behind the live edge. Sequence
-// mode never catches up by itself: overnight, one 2.6 s hiccup left audio
-// that far behind the picture for the rest of the session.
+// Audio latency cap (audio-only mode; with video, AvSync keeps audio on the
+// picture): if the audio player falls more than AUDIO_MAX_AHEAD_MS behind the
+// newest audio for AUDIO_LATE_CHECKS checks in a row (1 s apart), enough
+// upcoming audio is dropped natively to bring it back to
+// AUDIO_TARGET_AHEAD_MS. Sequence mode never catches up by itself, and
+// seeking the live audio player doesn't move it on Vega.
 const AUDIO_MAX_AHEAD_MS = 1200;
 const AUDIO_TARGET_AHEAD_MS = 500;
 const AUDIO_LATE_CHECKS = 3;
@@ -48,7 +49,6 @@ export class MirrorPlayer {
   private player: VideoPlayer | AudioPlayer | null = null;
   private source: MediaSource | null = null;
   private buffer: ReturnType<MediaSource['addSourceBuffer']> | null = null;
-  private queue: ArrayBuffer[] = [];
   private busy = false;
   private playing = false;
   private haveMedia = false;
@@ -65,9 +65,12 @@ export class MirrorPlayer {
   private lastUpdateEnd = 0;
   private lateChecks = 0;
   private latencyFixes = 0;
-  // Development: `touch /scratch/dev-audio-latency-test` makes the next audio
-  // player cap latency at 300 ms, so the jump can be checked on demand.
-  private maxAheadMs = AUDIO_MAX_AHEAD_MS;
+  /** The audio latency cap; AvSync turns it off while it keeps audio on video. */
+  latencyCap = true;
+  // Where each appended media segment landed: [media time (s), sender time (ms)],
+  // oldest first, to map the playhead to the sender's clock (AvSync).
+  private timeline: [number, number][] = [];
+  private queue: {buf: ArrayBuffer; senderMs: number}[] = [];
 
   constructor(
     private readonly log: Log,
@@ -109,9 +112,6 @@ export class MirrorPlayer {
     if (this.onStall) {
       this.watchdog = setInterval(() => this.checkStall(), 1000);
     } else if (!this.isVideo) {
-      if (Receiver.takeDevFlag('audio-latency-test')) {
-        this.maxAheadMs = 300;
-      }
       this.watchdog = setInterval(() => this.checkLatency(), 1000);
     }
     this.pump();
@@ -138,11 +138,12 @@ export class MirrorPlayer {
     }
   }
 
-  push(segment: ArrayBuffer, isMedia: boolean): void {
+  /** `senderMs`: the sender's clock time of the segment's first sample (0 if none). */
+  push(segment: ArrayBuffer, isMedia: boolean, senderMs = 0): void {
     if (this.closed) {
       return;
     }
-    this.queue.push(segment);
+    this.queue.push({buf: segment, senderMs: isMedia ? senderMs : 0});
     if (isMedia) {
       this.haveMedia = true;
     }
@@ -206,8 +207,19 @@ export class MirrorPlayer {
     }
     const next = this.queue.shift()!;
     try {
-      sb.appendBuffer(next);
+      // In sequence mode a segment lands at the end of what's buffered.
+      const vp = this.player;
+      const b = vp?.buffered;
+      const start = b && b.length ? b.end(b.length - 1) : 0;
+      sb.appendBuffer(next.buf);
       this.appended++;
+      if (next.senderMs > 0) {
+        this.timeline.push([start, next.senderMs]);
+        // Keep about the last 60 s.
+        while (this.timeline.length > 1 && this.timeline[0][0] < start - 60) {
+          this.timeline.shift();
+        }
+      }
     } catch (e) {
       if (String(e).includes('QuotaExceeded')) {
         // Full anyway: keep the segment, free space, retry on updateend.
@@ -290,14 +302,34 @@ export class MirrorPlayer {
     }
     const end = b.end(b.length - 1);
     const aheadMs = (end - vp.currentTime) * 1000;
-    this.lateChecks = aheadMs > this.maxAheadMs ? this.lateChecks + 1 : 0;
+    if (this.lateChecks < 0) {
+      this.lateChecks++;
+      return;
+    }
+    this.lateChecks = this.latencyCap && aheadMs > AUDIO_MAX_AHEAD_MS ? this.lateChecks + 1 : 0;
     if (this.lateChecks >= AUDIO_LATE_CHECKS) {
-      this.lateChecks = 0;
       this.latencyFixes++;
-      vp.currentTime = end - AUDIO_TARGET_AHEAD_MS / 1000;
-      this.log(`${this.stream.kind} latency ${aheadMs.toFixed(0)}ms: jumped to ${AUDIO_TARGET_AHEAD_MS}ms behind live (#${this.latencyFixes})`);
+      Receiver.shiftAudio(aheadMs - AUDIO_TARGET_AHEAD_MS);
+      // Give the shortened audio time to reach the playhead.
+      this.lateChecks = -AUDIO_LATE_CHECKS;
+      this.log(`${this.stream.kind} latency ${aheadMs.toFixed(0)}ms: dropping ${(aheadMs - AUDIO_TARGET_AHEAD_MS).toFixed(0)}ms (#${this.latencyFixes})`);
       countEvent(`${this.stream.kind}.latency_corrections`);
     }
+  }
+
+  /** The sender's clock time (ms) of what the playhead is playing, or NaN. */
+  playingSenderMs(): number {
+    const vp = this.player;
+    if (!vp || !this.playing || this.closed) {
+      return NaN;
+    }
+    const t = vp.currentTime;
+    const tl = this.timeline;
+    let i = tl.length - 1;
+    while (i >= 0 && tl[i][0] > t) {
+      i--;
+    }
+    return i < 0 ? NaN : tl[i][1] + (t - tl[i][0]) * 1000;
   }
 
   stats(): string {

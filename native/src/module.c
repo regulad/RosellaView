@@ -37,6 +37,7 @@ typedef struct {
     int kind;
     uint8_t *data;
     size_t len;
+    double sender_ms;
 } video_segment;
 
 static napi_value make_string(napi_env env, const char *s) {
@@ -98,21 +99,22 @@ static void deliver_video(napi_env env, napi_value js_cb, void *context, void *d
     uint8_t *bytes = seg->data;
     (void)context;
     if (env != NULL && js_cb != NULL) {
-        napi_value undefined, argv[2];
+        napi_value undefined, argv[3];
         napi_get_undefined(env, &undefined);
         napi_create_int32(env, seg->kind, &argv[0]);
+        napi_create_double(env, seg->sender_ms, &argv[2]);
         /* napi_create_arraybuffer is unimplemented on Vega; the external variant
          * works and hands the segment to JS without a copy. */
         if (napi_create_external_arraybuffer(env, bytes, seg->len, free_segment_data, NULL, &argv[1]) == napi_ok) {
             bytes = NULL; /* now owned by the ArrayBuffer's finalizer */
-            napi_call_function(env, undefined, js_cb, 2, argv, NULL);
+            napi_call_function(env, undefined, js_cb, 3, argv, NULL);
         }
     }
     free(bytes);
     free(seg);
 }
 
-static void send_segment(napi_threadsafe_function tsfn, int kind, uint8_t *data, size_t len) {
+static void send_segment(napi_threadsafe_function tsfn, int kind, uint8_t *data, size_t len, double sender_ms) {
     video_segment *seg;
     if (!tsfn) {
         free(data);
@@ -122,15 +124,20 @@ static void send_segment(napi_threadsafe_function tsfn, int kind, uint8_t *data,
     seg->kind = kind;
     seg->data = data;
     seg->len = len;
+    seg->sender_ms = sender_ms;
     if (napi_call_threadsafe_function(tsfn, seg, napi_tsfn_nonblocking) != napi_ok) {
         free(data);
         free(seg);
     }
 }
 
-static void video_sink(int kind, uint8_t *data, size_t len) { send_segment(g_video, kind, data, len); }
-static void audio_sink(int kind, uint8_t *data, size_t len) { send_segment(g_audio, kind, data, len); }
-static void sentry_sink(uint8_t *data, size_t len) { send_segment(g_sentry, 0, data, len); }
+static void video_sink(int kind, uint8_t *data, size_t len, double sender_ms) {
+    send_segment(g_video, kind, data, len, sender_ms);
+}
+static void audio_sink(int kind, uint8_t *data, size_t len, double sender_ms) {
+    send_segment(g_audio, kind, data, len, sender_ms);
+}
+static void sentry_sink(uint8_t *data, size_t len) { send_segment(g_sentry, 0, data, len, 0); }
 
 /* Replaces *slot with a threadsafe function for argv[0] if it's a function. */
 static int replace_listener(napi_env env, napi_callback_info info, napi_threadsafe_function *slot,
@@ -199,6 +206,17 @@ static napi_value js_set_watermark(napi_env env, napi_callback_info info) {
     return make_bool(env, on);
 }
 
+/* shiftAudio(ms): ms > 0 drops that much upcoming audio (sooner), < 0 inserts silence */
+static napi_value js_shift_audio(napi_env env, napi_callback_info info) {
+    size_t argc = 1;
+    napi_value argv[1];
+    int32_t ms = 0;
+    napi_get_cb_info(env, info, &argc, argv, NULL, NULL);
+    if (argc >= 1) napi_get_value_int32(env, argv[0], &ms);
+    receiver_shift_audio(ms);
+    return make_bool(env, 1);
+}
+
 /* restartVideo(): after rebuilding a stalled player; the next keyframe (requested now) starts it */
 static napi_value js_restart_video(napi_env env, napi_callback_info info) {
     (void)info;
@@ -263,6 +281,7 @@ static napi_value module_init(napi_env env, napi_value exports) {
         {"stop", NULL, js_stop, NULL, NULL, NULL, napi_default, NULL},
         {"isRunning", NULL, js_is_running, NULL, NULL, NULL, napi_default, NULL},
         {"restartVideo", NULL, js_restart_video, NULL, NULL, NULL, napi_default, NULL},
+        {"shiftAudio", NULL, js_shift_audio, NULL, NULL, NULL, napi_default, NULL},
         {"requestKeyframe", NULL, js_request_keyframe, NULL, NULL, NULL, napi_default, NULL},
         {"setSentryEnvelopeListener", NULL, js_set_sentry_listener, NULL, NULL, NULL, napi_default, NULL},
         {"sentryInit", NULL, js_sentry_init, NULL, NULL, NULL, napi_default, NULL},

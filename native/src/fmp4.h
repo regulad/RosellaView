@@ -12,8 +12,10 @@
 
 enum fmp4_kind { FMP4_INIT = 0, FMP4_MEDIA = 1 };
 
-/* Receives each finished segment. `data` is malloc'd; the callee owns it. */
-typedef void (*fmp4_output)(void *ctx, enum fmp4_kind kind, uint8_t *data, size_t len);
+/* Receives each finished segment. `data` is malloc'd; the callee owns it.
+ * `ts_ns` is the sender's clock time (ns) of the segment's first sample, for
+ * A/V sync; 0 for init segments, or when unknown. */
+typedef void (*fmp4_output)(void *ctx, enum fmp4_kind kind, uint8_t *data, size_t len, uint64_t ts_ns);
 
 typedef struct fmp4_muxer fmp4_muxer;
 
@@ -57,6 +59,6 @@ void fmp4_audio_configure(fmp4_audio *a, enum fmp4_audio_codec codec, unsigned s
 
 /* One coded sample (a FLAC frame or an AAC access unit) lasting
  * `duration` samples. */
-void fmp4_audio_push(fmp4_audio *a, const uint8_t *sample, size_t len, uint32_t duration);
+void fmp4_audio_push(fmp4_audio *a, const uint8_t *sample, size_t len, uint32_t duration, uint64_t ts_ns);
 
 #endif

@@ -121,7 +121,12 @@ let previous: {t: number; s: Record<string, number>} | null = null;
 let prevCpu: {t: number; ms: number} | null = null;
 
 /** Called every few seconds while a sender is connected. */
-export function receiverStats(s: Record<string, unknown>, video: PlayerMetrics | null, audio: PlayerMetrics | null): void {
+export function receiverStats(
+  s: Record<string, unknown>,
+  video: PlayerMetrics | null,
+  audio: PlayerMetrics | null,
+  av: {offsetMs: number; delayMs: number},
+): void {
   const now = Date.now();
   const cur = s as Record<string, number>;
   const attributes = senderAttributes;
@@ -194,6 +199,12 @@ export function receiverStats(s: Record<string, unknown>, video: PlayerMetrics |
   if (audio) {
     metrics.gauge('audio.buffer_ahead', audio.aheadMs, {unit: 'millisecond', attributes});
   }
+  // Lip sync: how far audio is from its target (negative: late), and the
+  // viewer's delay setting.
+  if (Number.isFinite(av.offsetMs)) {
+    metrics.gauge('av.offset', av.offsetMs, {unit: 'millisecond', attributes});
+  }
+  metrics.gauge('av.delay', av.delayMs, {unit: 'millisecond', attributes});
 }
 
 /** Call when the sender disconnects, so rates restart cleanly. */

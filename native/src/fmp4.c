@@ -250,7 +250,7 @@ static void emit_init(fmp4_muxer *m) {
     end(&w, mvex);
     end(&w, moov);
 
-    m->out(m->ctx, FMP4_INIT, w.b, w.n);
+    m->out(m->ctx, FMP4_INIT, w.b, w.n, 0);
 }
 
 /* One moof+mdat holding a single sample. Duration, size and flags go in tfhd
@@ -293,11 +293,11 @@ static void write_fragment(buf_t *w, uint32_t sequence, uint64_t decode_time, co
     patch32(w, data_offset_at, (uint32_t)(mdat + 8 - moof));
 }
 
-static void emit_media(fmp4_muxer *m, const buf_t *sample, int sync, uint32_t duration) {
+static void emit_media(fmp4_muxer *m, const buf_t *sample, int sync, uint32_t duration, uint64_t ts_ns) {
     buf_t w = {0};
     write_fragment(&w, ++m->sequence, m->decode_time, sample->b, sample->n, duration, sync);
     m->decode_time += duration;
-    m->out(m->ctx, FMP4_MEDIA, w.b, w.n);
+    m->out(m->ctx, FMP4_MEDIA, w.b, w.n, ts_ns);
 }
 
 /* ---------- public API ---------- */
@@ -393,7 +393,7 @@ void fmp4_push_h264(fmp4_muxer *m, const uint8_t *au, size_t len, uint64_t ts_ns
     m->have_last_ts = 1;
 
     if (sync) m->keyframes++;
-    emit_media(m, &sample, sync, duration);
+    emit_media(m, &sample, sync, duration, ts_ns);
     free(sample.b);
 }
 
@@ -562,7 +562,7 @@ static void emit_audio_init(fmp4_audio *a) {
     end(&w, b);
     end(&w, moov);
 
-    a->out(a->ctx, FMP4_INIT, w.b, w.n);
+    a->out(a->ctx, FMP4_INIT, w.b, w.n, 0);
 }
 
 fmp4_audio *fmp4_audio_create(fmp4_output out, void *ctx) {
@@ -587,7 +587,7 @@ void fmp4_audio_configure(fmp4_audio *a, enum fmp4_audio_codec codec, unsigned s
     a->decode_time = 0;
 }
 
-void fmp4_audio_push(fmp4_audio *a, const uint8_t *sample, size_t len, uint32_t duration) {
+void fmp4_audio_push(fmp4_audio *a, const uint8_t *sample, size_t len, uint32_t duration, uint64_t ts_ns) {
     buf_t w = {0};
     if (!a->configured || len == 0) return;
     if (!a->have_init) {
@@ -596,5 +596,5 @@ void fmp4_audio_push(fmp4_audio *a, const uint8_t *sample, size_t len, uint32_t 
     }
     write_fragment(&w, ++a->sequence, a->decode_time, sample, len, duration, 1);
     a->decode_time += duration;
-    a->out(a->ctx, FMP4_MEDIA, w.b, w.n);
+    a->out(a->ctx, FMP4_MEDIA, w.b, w.n, ts_ns);
 }

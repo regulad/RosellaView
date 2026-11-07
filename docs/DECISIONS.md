@@ -158,3 +158,29 @@ The laptop's `create_ap` AP now runs with `IEEE80211N=1`, started via `create_ap
 - Each forced IDR comes with a codec (SPS/PPS) packet that libairplay reports as `video_pause`/`video_resume`. That's noise.
 - If a sender refuses the request (CarPlay senders are known to), video freezes when the buffer fills again. The app reports "keyframe request not sent", and a stall warning when that happens.
 - The 10 s interval must stay below `MirrorPlayer`'s 10 s back buffer plus its 5 s trim period.
+
+## D8. Lip sync: keep audio on the picture by sender time; viewer-set delay (2026-11-07)
+
+**Decision:**
+- Every segment carries the sender's clock time of its first sample (`ntp_time_remote`, which audio and video share). Each `MirrorPlayer` keeps a map from its playhead to sender time.
+- `AvSync` compares the two once a second. When audio is more than 80 ms off its target for 2 s, the native audio pipeline drops upcoming samples (audio late) or inserts silence (audio early).
+- The target is the video's sender time minus a viewer-set audio delay. Left/right on the remote while mirroring set it, in 20 ms steps from −500 to +500 ms, and it's saved.
+
+**Why:**
+- **Video and audio play in separate MSE players with nothing tying them together.**
+  - Overnight, one hiccup left audio about 2.6 s behind for 7 hours.
+  - In a later session, a step left it 0.6 s behind: visible, and under the earlier absolute 1.2 s cap.
+- **Seeking the live audio player (`currentTime`) doesn't move it on Vega.** 147 "corrections" in a few minutes changed nothing, and probably caused the audible dips.
+- **Corrections need guard rails.** The first version dropped 1.2 s at once, starved the audio player, then kept dropping as the stalled player's offset grew, until the audio was gone. Now:
+  - at most 300 ms per step
+  - at least 300 ms of audio left buffered
+  - only while both playheads move
+  - a 5 s warm-up after a player starts
+  - offsets over 3 s ignored
+  - 4 s to settle after each correction
+- **The TV's audio and video output latencies differ by a constant** that timestamps can't see. Hence the viewer delay; its default may change once it's measured on more TVs.
+
+**Implications:**
+- In audio-only mode (no video player) the latency cap in `MirrorPlayer` keeps audio live instead, by dropping samples down to about 0.5 s.
+- AAC-LC passthrough (ct 4) can't be shifted, since it isn't decoded. No sender has used it so far.
+- Metrics: `av.offset` (distance from target; negative means audio late), `av.delay` and `av.corrections`.

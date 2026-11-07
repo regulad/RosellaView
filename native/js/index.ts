@@ -11,12 +11,13 @@ export enum SegmentKind {
 
 interface NativeReceiver {
   setEventListener(listener: ((json: string) => void) | null): boolean;
-  setVideoListener(listener: ((kind: number, segment: ArrayBuffer) => void) | null): boolean;
-  setAudioListener(listener: ((kind: number, segment: ArrayBuffer) => void) | null): boolean;
+  setVideoListener(listener: ((kind: number, segment: ArrayBuffer, senderMs: number) => void) | null): boolean;
+  setAudioListener(listener: ((kind: number, segment: ArrayBuffer, senderMs: number) => void) | null): boolean;
   start(name: string): boolean;
   stop(): boolean;
   isRunning(): boolean;
   restartVideo(): boolean;
+  shiftAudio(ms: number): boolean;
   requestKeyframe(): boolean;
   setSentryEnvelopeListener(listener: ((kind: number, envelope: ArrayBuffer) => void) | null): boolean;
   sentryInit(dsn: string, release: string, dist: string, environment: string): boolean;
@@ -37,19 +38,25 @@ export const Receiver = {
   onEvent(listener: ((event: ReceiverEvent) => void) | null): void {
     native.setEventListener(listener ? (json) => listener(JSON.parse(json) as ReceiverEvent) : null);
   },
-  /** Receives the mirrored video as fMP4: an init segment, then media segments. */
-  onVideo(listener: ((kind: SegmentKind, segment: ArrayBuffer) => void) | null): void {
-    native.setVideoListener(listener ? (kind, segment) => listener(kind as SegmentKind, segment) : null);
+  /**
+   * Receives the mirrored video as fMP4: an init segment, then media segments.
+   * `senderMs` is the sender's clock time of the segment's first frame (ms;
+   * 0 for init segments), on the same clock as audio's, for A/V sync.
+   */
+  onVideo(listener: ((kind: SegmentKind, segment: ArrayBuffer, senderMs: number) => void) | null): void {
+    native.setVideoListener(listener ? (kind, segment, ms) => listener(kind as SegmentKind, segment, ms) : null);
   },
-  /** Receives audio as fMP4 (FLAC, or AAC-LC passthrough); a new init segment starts each stream. */
-  onAudio(listener: ((kind: SegmentKind, segment: ArrayBuffer) => void) | null): void {
-    native.setAudioListener(listener ? (kind, segment) => listener(kind as SegmentKind, segment) : null);
+  /** Receives audio as fMP4 (FLAC, or AAC-LC passthrough); a new init segment starts each stream. Like onVideo. */
+  onAudio(listener: ((kind: SegmentKind, segment: ArrayBuffer, senderMs: number) => void) | null): void {
+    native.setAudioListener(listener ? (kind, segment, ms) => listener(kind as SegmentKind, segment, ms) : null);
   },
   start: (name: string): boolean => native.start(name),
   stop: (): boolean => native.stop(),
   isRunning: (): boolean => native.isRunning(),
   /** After closing a stalled video player: the next keyframe, requested at once, starts a new one. */
   restartVideo: (): boolean => native.restartVideo(),
+  /** A/V sync: ms > 0 drops that much upcoming audio (plays sooner), ms < 0 inserts silence (later). */
+  shiftAudio: (ms: number): boolean => native.shiftAudio(Math.round(ms)),
   /** Asks the sender for an IDR frame over the AirPlay event channel; true if sent. */
   requestKeyframe: (): boolean => native.requestKeyframe(),
   /**

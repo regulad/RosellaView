@@ -8,6 +8,8 @@ import React, {useEffect, useRef, useState} from 'react';
 import {AppState, Dimensions, Pressable, StyleSheet, Text, View} from 'react-native';
 import {KeplerVideoSurfaceView} from '@amazon-devices/react-native-w3cmedia';
 import {Receiver, ReceiverEvent, SegmentKind} from 'rosellaview-native';
+import {AvDelayOverlay} from './AvDelayOverlay';
+import {AvSync} from './AvSync';
 import {KeepAwake} from './KeepAwake';
 import {MirrorPlayer} from './MirrorPlayer';
 import {buyUnlock, isUnlocked} from './Purchases';
@@ -61,6 +63,8 @@ export const App = () => {
   const volume = useRef(1);
   const surface = useRef<string | null>(null);
   const keepAwake = useRef(new KeepAwake(log));
+  const avSync = useRef(new AvSync()).current;
+  const [avDelay, setAvDelay] = useState(0);
 
   useEffect(() => {
     const closePlayer = () => {
@@ -72,7 +76,7 @@ export const App = () => {
       audio.current = null;
     };
 
-    Receiver.onAudio((kind, segment) => {
+    Receiver.onAudio((kind, segment, senderMs) => {
       if (kind === SegmentKind.Init) {
         // Each audio stream (mirroring, or music) starts with a new init segment.
         closeAudio();
@@ -82,7 +86,7 @@ export const App = () => {
           .then(() => a.setVolume(volume.current))
           .catch((e) => log(`audio open failed: ${String(e)}`));
       }
-      audio.current?.push(segment, kind === SegmentKind.Media);
+      audio.current?.push(segment, kind === SegmentKind.Media, senderMs);
     });
 
     // A stalled video player is replaced: the sender is asked for a keyframe,
@@ -98,14 +102,14 @@ export const App = () => {
       }
     };
 
-    Receiver.onVideo((kind, segment) => {
+    Receiver.onVideo((kind, segment, senderMs) => {
       if (kind === SegmentKind.Init && !player.current) {
         const p = new MirrorPlayer(log, {kind: 'video'}, recoverVideo);
         player.current = p;
         p.setSurface(surface.current);
         p.open().catch((e) => log(`player open failed: ${String(e)}`));
       }
-      player.current?.push(segment, kind === SegmentKind.Media);
+      player.current?.push(segment, kind === SegmentKind.Media, senderMs);
     });
 
     Receiver.onEvent((e: ReceiverEvent) => {
@@ -165,7 +169,7 @@ export const App = () => {
     const stats = setInterval(() => {
       const s = Receiver.stats();
       if ((s.connections as number) > 0) {
-        receiverStats(s, player.current?.metrics() ?? null, audio.current?.metrics() ?? null);
+        receiverStats(s, player.current?.metrics() ?? null, audio.current?.metrics() ?? null, avSync);
         // iOS and macOS send one IDR per session unless asked; the player can
         // only drop played video (MirrorPlayer.trim) back to an IDR, so ask
         // for one every KEYFRAME_EVERY_TICKS (DECISIONS.md D7).
@@ -174,8 +178,11 @@ export const App = () => {
         }
       }
     }, 5000);
+    avSync.load().then(() => setAvDelay(avSync.delayMs));
+    const sync = setInterval(() => avSync.tick(player.current, audio.current), 1000);
     return () => {
       clearInterval(stats);
+      clearInterval(sync);
       Receiver.stop();
       Receiver.onEvent(null);
       Receiver.onVideo(null);
@@ -245,6 +252,15 @@ export const App = () => {
           }}
         />
         {unlocked ? null : <Watermark />}
+        <AvDelayOverlay
+          active={mirroring}
+          delayMs={avDelay}
+          onChange={(ms) => {
+            avSync.setDelay(ms);
+            setAvDelay(avSync.delayMs);
+            log(`av delay set to ${avSync.delayMs}ms`);
+          }}
+        />
       </View>
     );
   }

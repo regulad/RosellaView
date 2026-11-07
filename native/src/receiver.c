@@ -59,11 +59,11 @@ void receiver_set_event_sink(receiver_event_sink sink) { g_sink = sink; }
 void receiver_set_video_sink(receiver_video_sink sink) { g_video_sink = sink; }
 void receiver_set_audio_sink(receiver_video_sink sink) { g_audio_sink = sink; }
 
-static void audio_output(void *ctx, enum fmp4_kind kind, uint8_t *data, size_t len) {
+static void audio_output(void *ctx, enum fmp4_kind kind, uint8_t *data, size_t len, uint64_t ts_ns) {
     (void)ctx;
     if (kind == FMP4_INIT) emit("{\"type\":\"audio_init\",\"bytes\":%zu}", len);
     if (g_audio_sink) {
-        g_audio_sink(kind == FMP4_INIT ? 0 : 1, data, len);
+        g_audio_sink(kind == FMP4_INIT ? 0 : 1, data, len, (double)ts_ns / 1e6);
     } else {
         free(data);
     }
@@ -109,7 +109,7 @@ static void audio_reset_locked(void) {
     pthread_mutex_unlock(&g_audio_lock);
 }
 
-static void mux_output(void *ctx, enum fmp4_kind kind, uint8_t *data, size_t len) {
+static void mux_output(void *ctx, enum fmp4_kind kind, uint8_t *data, size_t len, uint64_t ts_ns) {
     (void)ctx;
     if (kind == FMP4_INIT && g_mux) { /* called under g_mux_lock from fmp4_push_h264 */
         uint8_t sps[256];
@@ -123,7 +123,7 @@ static void mux_output(void *ctx, enum fmp4_kind kind, uint8_t *data, size_t len
              hex);
     }
     if (g_video_sink) {
-        g_video_sink(kind == FMP4_INIT ? 0 : 1, data, len);
+        g_video_sink(kind == FMP4_INIT ? 0 : 1, data, len, (double)ts_ns / 1e6);
     } else {
         free(data);
     }
@@ -270,7 +270,7 @@ static void cb_audio_process(void *cls, raop_ntp_t *ntp, audio_decode_struct *da
     atomic_fetch_add(&g_audio_packets, 1);
     atomic_fetch_add(&g_audio_bytes, (uint_fast64_t)data->data_len);
     pthread_mutex_lock(&g_audio_lock);
-    if (g_audio) audio_push(g_audio, data->data, (size_t)data->data_len, data->rtp_time);
+    if (g_audio) audio_push(g_audio, data->data, (size_t)data->data_len, data->rtp_time, data->ntp_time_remote);
     pthread_mutex_unlock(&g_audio_lock);
 }
 
@@ -674,6 +674,12 @@ void receiver_video_restart(void) {
     if (g_mux) fmp4_restart(g_mux);
     pthread_mutex_unlock(&g_mux_lock);
     receiver_request_keyframe();
+}
+
+void receiver_shift_audio(int ms) {
+    pthread_mutex_lock(&g_audio_lock);
+    if (g_audio) audio_shift(g_audio, ms);
+    pthread_mutex_unlock(&g_audio_lock);
 }
 
 int receiver_request_keyframe(void) {
