@@ -19,12 +19,12 @@ To find and fix problems, RosellaView sends crash reports and diagnostics to Sen
 - **Errors and crash reports:** what went wrong and where in RosellaView's code.
 - **Playback and performance statistics:** frame rates, buffering, audio/video sync, memory and processor use.
 - **This TV:** RosellaView's version, and the Fire TV's model and software version.
-- **The device you mirror from:**
-  - its name (for example "Alex's iPhone"), model and operating system version
-  - its AirPlay device ID and network hardware (MAC) address
+- **The device you mirror from:** its model and operating system version only (for example "iPhone18,1, iOS 27").
 - **Connection events:** when devices connect and disconnect, and which mirroring features they use.
 
-This is used only to diagnose and improve RosellaView. It isn't sold, shared for advertising, or combined with other data about you. Sentry keeps it for up to 90 days.
+RosellaView doesn't send device names, device IDs, network (MAC or IP) addresses or anything else that identifies you or your devices, and our diagnostics service is set not to store IP addresses.
+
+This is used only to diagnose and improve RosellaView. It isn't sold, shared for advertising, or combined with other data. Sentry keeps it for up to 90 days.
 
 ## Purchases
 
@@ -32,7 +32,7 @@ The "remove watermark" purchase is handled by the Amazon Appstore under Amazon's
 
 ## Settings stored on the TV
 
-Your audio-delay setting for each device, the Compatibility Mode setting and whether the watermark is unlocked are stored on the TV only.
+Your audio-delay setting for each device (keyed by the device's AirPlay ID), the Compatibility Mode setting and whether the watermark is unlocked are stored on the TV only.
 
 ## Children
 
@@ -40,7 +40,7 @@ RosellaView isn't directed at children and doesn't knowingly collect children's 
 
 ## Contact
 
-Questions or deletion requests: regulad@regulad.xyz. We'll delete diagnostics linked to a device you name, on request.
+Questions: regulad@regulad.xyz.
 
 ## Changes
 
