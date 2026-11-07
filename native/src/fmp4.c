@@ -20,6 +20,14 @@
  * twice the declared frame duration, so declare a low rate and real
  * durations up to MAX_DURATION play as given (docs/DECISIONS.md D4). */
 #define VUI_FPS 10u
+/* Senders may send a single keyframe per session, and MSE only evicts
+ * buffered video in whole runs from one sync sample to the next, so with real
+ * keyframes alone the SourceBuffer fills (QuotaExceededError after ~130 s of a
+ * Mac's 8 Mbit/s) and playback freezes. So a frame is flagged as a sync
+ * sample at least this often. The flag only tells the player where it may
+ * cut; the decoder, which has already decoded everything before it, carries
+ * on unaffected. */
+#define RAP_INTERVAL TIMESCALE
 #define MIN_DURATION (TIMESCALE / 1000u)
 #define MAX_DURATION (2u * TIMESCALE / VUI_FPS - TIMESCALE / 100u) /* 190 ms */
 #define MAX_PS 256
@@ -35,6 +43,7 @@ struct fmp4_muxer {
     int have_init;
     uint32_t sequence;
     uint64_t decode_time; /* in TIMESCALE units */
+    uint64_t last_rap_time; /* decode_time of the last fragment flagged as a sync sample */
     uint64_t last_ts_ns;
     int have_last_ts;
     uint64_t keyframes;
@@ -445,7 +454,12 @@ void fmp4_push_h264(fmp4_muxer *m, const uint8_t *au, size_t len, uint64_t ts_ns
 
     if (sync) m->keyframes++;
     gop_add(m, &sample, sync);
-    emit_media(m, &sample, sync, duration);
+    if (sync || m->decode_time - m->last_rap_time >= RAP_INTERVAL) {
+        m->last_rap_time = m->decode_time;
+        emit_media(m, &sample, 1, duration);
+    } else {
+        emit_media(m, &sample, 0, duration);
+    }
     free(sample.b);
 }
 
