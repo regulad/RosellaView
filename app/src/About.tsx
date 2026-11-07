@@ -160,7 +160,7 @@ export const About = ({compatibilityMode, onCompatibilityMode, onClose}: Props) 
 
 const styles = StyleSheet.create({
   root: {flex: 1, backgroundColor: '#000', alignItems: 'center'},
-  scroll: {flex: 1, width: 1100},
+  scroll: {flex: 1, width: '80%'},
   content: {paddingTop: 72, paddingBottom: 48},
   title: {color: '#fff', fontSize: 44, fontWeight: 'bold'},
   heading: {color: '#fff', fontSize: 28, fontWeight: 'bold', marginTop: 36, marginBottom: 10},
