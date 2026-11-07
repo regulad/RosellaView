@@ -16,7 +16,8 @@
     "@sentry/core": "^11.8.0",
     "react": "19.2.0",
     "react-native": "0.83.0",
-    "rosellaview-native": "file:../native/rosellaview-native-0.1.0.tgz"
+    "rosellaview-native": "file:../native/rosellaview-native-0.1.0.tgz",
+    "rosellaview-surface": "file:../native-view/rosellaview-surface-0.1.0.tgz"
   },
   "engines": {
     "node": ">=20"

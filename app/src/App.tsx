@@ -8,6 +8,7 @@ import React, {useEffect, useRef, useState} from 'react';
 import {AppState, Dimensions, Pressable, StyleSheet, Text, View} from 'react-native';
 import {KeplerVideoSurfaceView} from '@amazon-devices/react-native-w3cmedia';
 import {Receiver, ReceiverEvent, SegmentKind} from 'rosellaview-native';
+import {RosellaSurface} from 'rosellaview-surface';
 import {AvDelayOverlay} from './AvDelayOverlay';
 import {AvSync} from './AvSync';
 import {KeepAwake} from './KeepAwake';
@@ -36,6 +37,10 @@ const SCREEN = Dimensions.get('window');
 // Stats run every 5 s; a keyframe is requested every other tick (10 s), inside
 // MirrorPlayer's 10 s back buffer.
 const KEYFRAME_EVERY_TICKS = 2;
+// Development (proof of concept): `touch /scratch/dev-surface-test` from the
+// component shell, then relaunch: the idle screen shows our own GL surface
+// (a full-range grey step chart) instead of the normal idle UI. Read once.
+const SURFACE_TEST = Receiver.takeDevFlag('surface-test');
 
 
 /** Largest box of the video's aspect ratio that fits the screen, centred. */
@@ -65,6 +70,11 @@ export const App = () => {
   const keepAwake = useRef(new KeepAwake(log));
   const avSync = useRef(new AvSync()).current;
   const [avDelay, setAvDelay] = useState(0);
+  useEffect(() => {
+    if (SURFACE_TEST) {
+      log('RosellaSurface: surface test enabled');
+    }
+  }, []);
 
   useEffect(() => {
     const closePlayer = () => {
@@ -288,6 +298,17 @@ export const App = () => {
     );
   }
 
+  if (SURFACE_TEST) {
+    return (
+      <View style={styles.root}>
+        <RosellaSurface
+          style={styles.fill}
+          onStatus={(e) => log(`RosellaSurface: ${e.nativeEvent.message}`)}
+        />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.root}>
       {/* Referential use of Apple's mark for its own sender-side feature;
@@ -316,6 +337,7 @@ export const App = () => {
 const styles = StyleSheet.create({
   root: {flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center'},
   video: {position: 'absolute'},
+  fill: {position: 'absolute', left: 0, top: 0, width: SCREEN.width, height: SCREEN.height},
   line: {color: '#ddd', fontSize: 40},
   name: {color: '#fff', fontSize: 64, fontWeight: 'bold', marginTop: 12},
   subtle: {color: '#888', fontSize: 28, marginTop: 24},

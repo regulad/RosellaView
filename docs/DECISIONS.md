@@ -227,3 +227,31 @@ The laptop's `create_ap` AP now runs with `IEEE80211N=1`, started via `create_ap
 - The glue source isn't distributed (System Libraries are excluded from Corresponding Source), which also fits the SDK's confidentiality terms.
 - A one-line note for the lawyer review, next to playfair.
 - The existing Node-API module stays as it is.
+
+## D11. Native video surface: a media-surface component with our own GLES (2026-11-07; proof of concept)
+
+**Result:**
+- A native UI component (`native-view/`, package `rosellaview-surface`, `/xyz.regulad.rosellaview.surface`) renders inside RosellaView's window with our own OpenGL ES (Mesa / Mali-G310, ES 3.1), using public APIs only.
+- A full-range NV12 grey step chart, converted by our own full-range BT.709 shader, showed **all 8 bars at both ends on the TV** (0–32 and 223–255). Pixel readback was exact.
+- So full range survives the display path. The clipping (D9) is in the MSE/hardware-decoder path.
+
+**How:**
+1. `IViewModule::makeMediaSurfaceView` gives a hole-punched surface in the window; `IKeplerMediaSurfaceProvider::getMediaSurface()` gives its `IMediaSurface`.
+2. On our own thread: system-client display controller → `createGpuDeviceUsingOpenGlesApi`, then three 1920×1080 ARGB8888 scan-out graphics buffers.
+3. Each buffer is a GL texture (`IGlGpuDevice::createGlImage`/`bindBuffer`) attached to our own framebuffer. An offscreen surface exists only to make the context current.
+4. Draw, `glFinish`, then `IMediaSurface::presentBuffer`.
+
+**What didn't work:** `makeGLSurfaceView` + `createScreenSurface(window handle)`. An app component only reaches `createDisplayControllerForSystemClients`, and a GPU device from it can't make the UI toolkit's window current ("Make Current Surface Wrong!"). expo-gl uses private factories for this; we don't.
+
+**Gotchas:**
+- `addBufferReleaseListener` doesn't keep its listener alive; hold it, or it segfaults.
+- The SDK ships no GL headers, so `native-view/src/gles2.h` declares what we use. Entry points come from `IGpuDevice::getExtensionAPI`.
+- JS `onStatus` events emitted from the frame callback never arrive (unexplained), so status goes to `/scratch/rosella-surface.log`.
+- The library must be named `<uiComponentName>.so`.
+- It needs its own package: one autolink entry can't have both `libraryName` and `uiComponentName`.
+
+**Next:** feed decoded mirroring video through it. This removes MSE's ~450 ms buffer and the range clipping. Open question: the decoder.
+- FFmpeg software (in our build, CPU-bound)
+- MediaTek V4L2 `/dev/video0` (hardware; untested from the sandbox)
+
+Behind the dev flag `surface-test` for now.

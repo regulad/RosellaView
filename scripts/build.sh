@@ -30,7 +30,7 @@ VERSION=$(node -p "require('$APP/package.json').version")
 GIT=$(git -C "$ROOT" rev-parse --short=12 HEAD)
 # app/package-lock.json changes on every build (the local module tarball's
 # checksum), so it doesn't count.
-if ! git -C "$ROOT" diff --quiet HEAD -- app native ':!app/package-lock.json'; then
+if ! git -C "$ROOT" diff --quiet HEAD -- app native native-view ':!app/package-lock.json'; then
   # Uncommitted changes: make each build's release unique, so its source map
   # can't be confused with another build's.
   GIT="$GIT-dirty.$(date +%s)"
@@ -59,9 +59,15 @@ distrobox enter vega -- bash -lc "set -euo pipefail
   npm run build > /tmp/rv-native-build.log 2>&1 || { grep -E 'error|FAILED' /tmp/rv-native-build.log | head -20; exit 1; }
   rm -f ./*.tgz
   npm pack --ignore-scripts > /dev/null 2>&1
+  # The native UI component (GL surface view): its own package.
+  cd '$ROOT/native-view'
+  [ -d node_modules ] || npm install --no-audit --no-fund > /dev/null 2>&1
+  npm run build > /tmp/rv-view-build.log 2>&1 || { grep -E 'error|FAILED' /tmp/rv-view-build.log | head -20; exit 1; }
+  rm -f ./*.tgz
+  npm pack --ignore-scripts > /dev/null 2>&1
   cd '$APP'
-  npm uninstall rosellaview-native > /dev/null 2>&1
-  npm install --no-audit --no-fund file:../native/rosellaview-native-0.1.0.tgz > /dev/null
+  npm uninstall rosellaview-native rosellaview-surface > /dev/null 2>&1
+  npm install --no-audit --no-fund file:../native/rosellaview-native-0.1.0.tgz file:../native-view/rosellaview-surface-0.1.0.tgz > /dev/null
   # -output-source-map: Hermes writes index.hermes.bundle.map next to the bytecode.
   npx react-native build-vega --build-type Release --hermes-flags '-O,-w,-output-source-map' > /tmp/rv-app-build.log 2>&1 \
     || { grep -iE 'error|FAILED' /tmp/rv-app-build.log | head -20; exit 1; }
