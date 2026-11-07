@@ -22,6 +22,11 @@ These are findings about AirPlay senders and libairplay (UxPlay's `lib/`), seen 
   - It ignores the receiver's advertised `audioFormats` and sends these regardless.
   - The audio stream stops and restarts with a fresh `audio_format` call when apps pause media.
 
+- **Apps whose video iOS leaves out of the mirror** (2026-11-07). Mirroring carries on, but the app's video area isn't in it.
+  - **TikTok:** the phone switches to a "playing on the TV" screen; the TV shows that UI, with its progress bar advancing, but no video. The frame rate drops to the UI's updates, often 0 for seconds at a time, and iOS may send the "video stream is stopping" codec packet (libairplay's `video_pause`) and later post `/audioMode` `default`. Advertising feature bits 0 and 4 (Video, HLS), as `uxplay -hls` does, didn't make it hand the video over (`/play`), so it wants an AirPlay video protocol libairplay doesn't implement.
+  - **HDCP-protected video** (FairPlay DRM, as in most paid streaming apps) is left out the same way.
+  - **YouTube works:** its video is mirrored inside the phone UI.
+
 ## macOS (MacBook8,1, User-Agent AirPlay/550.10)
 
 - **Video:** a full-screen video is mirrored at the **content's frame rate** (~24 fps for a film) at 1280×720, at 3–10 Mbit/s. So frame durations can't be assumed to be 1/60 s.

@@ -206,7 +206,7 @@ static napi_value js_can_resync_video(napi_env env, napi_callback_info info) {
 
 /* note(msg): appends an app-side line to the development journal */
 static napi_value js_note(napi_env env, napi_callback_info info) {
-    char msg[MAX_STRING_ARG];
+    char msg[1024]; /* room for an error and a few stack frames */
     if (string_arg(env, info, msg, sizeof msg)) receiver_note(msg);
     return make_bool(env, 1);
 }
