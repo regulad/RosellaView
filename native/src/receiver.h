@@ -36,6 +36,9 @@ void receiver_set_audio_sink(receiver_video_sink sink);
 int receiver_start(const char *base_name);
 void receiver_stop(void);
 int receiver_is_running(void);
+/* Forgets this receiver's identity (its hardware ID, so its name tag, and its
+ * pairing key) and starts again with a new one. Returns receiver_start's. */
+int receiver_reset_identity(void);
 
 /* While on (the default), audio carries a spoken "Preview." every 5 s of
  * playback (mirroring and audio-only alike); the app turns it off once the

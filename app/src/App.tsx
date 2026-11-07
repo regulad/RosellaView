@@ -332,6 +332,8 @@ export const App = () => {
   if (showAbout) {
     return (
       <About
+        receiverName={receiverName}
+        onResetIdentity={() => log(`identity reset -> ${Receiver.resetIdentity()}`)}
         compatibilityMode={compatibility}
         onCompatibilityMode={onCompatibilityMode}
         onClose={() => setShowAbout(false)}

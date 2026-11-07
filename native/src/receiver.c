@@ -740,6 +740,8 @@ static void report_memlock(void) {
          cur, max, page, rc == 0 ? "true" : "false", err);
 }
 
+static char g_base_name[64] = "RosellaView"; /* the last receiver_start's */
+
 int receiver_start(const char *base_name) {
     raop_callbacks_t cbs;
     unsigned char hw[6];
@@ -769,6 +771,7 @@ int receiver_start(const char *base_name) {
     }
     pthread_mutex_unlock(&g_audio_lock);
 
+    snprintf(g_base_name, sizeof g_base_name, "%s", base_name);
     get_hw_addr(hw);
     snprintf(device_id, sizeof device_id, "%02x:%02x:%02x:%02x:%02x:%02x", hw[0], hw[1], hw[2], hw[3], hw[4], hw[5]);
     device_tag(hw, tag);
@@ -911,6 +914,16 @@ void receiver_stop(void) {
 }
 
 int receiver_is_running(void) { return g_raop != NULL; }
+
+int receiver_reset_identity(void) {
+    /* A new hardware ID means a new name tag, and senders see a new receiver:
+     * its old pairings (the pairing key) go too. */
+    receiver_stop();
+    unlink(IDENTITY_FILE);
+    unlink(PAIRING_KEY_FILE);
+    emit("{\"type\":\"identity_reset\"}");
+    return receiver_start(g_base_name);
+}
 
 void receiver_video_restart(void) {
     pthread_mutex_lock(&g_mux_lock);

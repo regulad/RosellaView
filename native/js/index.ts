@@ -16,6 +16,7 @@ interface NativeReceiver {
   start(name: string): boolean;
   stop(): boolean;
   isRunning(): boolean;
+  resetIdentity(): boolean;
   restartVideo(): boolean;
   shiftAudio(ms: number): boolean;
   requestKeyframe(): boolean;
@@ -72,6 +73,8 @@ export const Receiver = {
   start: (name: string): boolean => native.start(name),
   stop: (): boolean => native.stop(),
   isRunning: (): boolean => native.isRunning(),
+  /** A new name tag ("RosellaView XXXX") and pairing key; restarts the receiver (a new "started" event). */
+  resetIdentity: (): boolean => native.resetIdentity(),
   /** After closing a stalled video player: the next keyframe, requested at once, starts a new one. */
   restartVideo: (): boolean => native.restartVideo(),
   /** A/V sync: ms > 0 drops that much upcoming audio (plays sooner), ms < 0 inserts silence (later). */

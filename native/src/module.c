@@ -245,6 +245,12 @@ static napi_value js_sentry_init(napi_env env, napi_callback_info info) {
     return make_bool(env, rv_sentry_init(dsn, release, dist, environment) == 0);
 }
 
+/* resetIdentity(): a new name tag and pairing key; restarts the receiver */
+static napi_value js_reset_identity(napi_env env, napi_callback_info info) {
+    (void)info;
+    return make_bool(env, receiver_reset_identity() == 0);
+}
+
 static napi_value js_is_running(napi_env env, napi_callback_info info) {
     (void)info;
     return make_bool(env, receiver_is_running());
@@ -286,6 +292,7 @@ static napi_value module_init(napi_env env, napi_value exports) {
         {"start", NULL, js_start, NULL, NULL, NULL, napi_default, NULL},
         {"stop", NULL, js_stop, NULL, NULL, NULL, napi_default, NULL},
         {"isRunning", NULL, js_is_running, NULL, NULL, NULL, napi_default, NULL},
+        {"resetIdentity", NULL, js_reset_identity, NULL, NULL, NULL, napi_default, NULL},
         {"restartVideo", NULL, js_restart_video, NULL, NULL, NULL, napi_default, NULL},
         {"shiftAudio", NULL, js_shift_audio, NULL, NULL, NULL, napi_default, NULL},
         {"requestKeyframe", NULL, js_request_keyframe, NULL, NULL, NULL, napi_default, NULL},
