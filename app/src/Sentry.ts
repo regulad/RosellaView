@@ -41,6 +41,8 @@ import {Dimensions, Platform} from 'react-native';
 import {Receiver} from 'rosellaview-native';
 import {BUILD} from './buildInfo';
 
+const UPLOAD_TIMEOUT_MS = 15000;
+
 const DSN = 'https://177b93c7aaee9b05f6c07f68d6a03393@o4506961510596608.ingest.us.sentry.io/4512389338628096';
 
 // The app's own Hermes bundle; frames from it are symbolicated with the
@@ -89,15 +91,25 @@ function post(url: string, body: string | Uint8Array | ArrayBuffer) {
   // ArrayBuffer goes out as bytes (minidumps are binary).
   const bytes =
     body instanceof Uint8Array ? body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) : body;
-  return fetch(url, {method: 'POST', body: bytes as never, headers: {'Content-Type': 'application/x-sentry-envelope'}}).then(
-    (res) => ({
+  // Give up on a request after UPLOAD_TIMEOUT_MS: one stranded on a dead
+  // connection (the network path changed) otherwise hangs until TCP times
+  // out, while the transport's queue fills and new reports are dropped.
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), UPLOAD_TIMEOUT_MS);
+  return fetch(url, {
+    method: 'POST',
+    body: bytes as never,
+    headers: {'Content-Type': 'application/x-sentry-envelope'},
+    signal: abort.signal,
+  })
+    .finally(() => clearTimeout(timer))
+    .then((res) => ({
       statusCode: res.status,
       headers: {
         'x-sentry-rate-limits': res.headers.get('X-Sentry-Rate-Limits'),
         'retry-after': res.headers.get('Retry-After'),
       },
-    }),
-  );
+    }));
 }
 
 let started = false;
