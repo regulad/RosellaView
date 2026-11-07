@@ -111,20 +111,38 @@ The laptop's `create_ap` AP now runs with `IEEE80211N=1`, started via `create_ap
 - Sender details are personal data, so the Appstore privacy disclosure must cover crash and diagnostic data sent to a third party (Sentry).
 - The sender's OS name, version and build, its AirPlay version and its MAC address come from the SETUP request. libairplay doesn't pass them on, so our fork does: `regulad/UxPlay`, branch `rosella`, adds a `report_client_details` callback.
 
-## D6. Video sync samples: every frame a second, flagged in tfhd (2026-11-07)
+## D6. Video sync samples and trimming (2026-11-07, revised by D7)
 
-**Decision:** A video fragment is flagged as a sync sample if it's a real IDR frame, or if a second of media time has passed since the last flagged fragment. The flag goes in the `tfhd` default sample flags, not in `trun`.
+**What we tried, and what held:**
+- iOS and macOS send one IDR per mirroring session. MSE keeps played compressed video for seeking, and Vega's player:
+  - never evicts it by itself
+  - can cut it only at real IDR frames, judged from the H.264 data
+- The `SourceBuffer` filled at the OS library's 100 MB threshold, after about 2 minutes of a Mac's 8 Mbit/s and about 6 of an iPhone's, then froze with `QuotaExceededError`.
+- Flagging sync samples once a second didn't help, in `trun` or in the `tfhd` defaults: the player ignores the container's flags for this.
+- `remove()` behind the playhead ran on to the next IDR. With none ahead, it wiped the buffer, the frames about to play included.
+- The decoder itself never needs old compressed frames; P-frames refer to decoded pictures in its reference buffer.
+
+**What stays:**
+- `MirrorPlayer` removes played video more than 10 s behind the playhead every 5 s (hls.js's `backBufferLength`).
+- On `QuotaExceededError` it trims and retries the segment.
+- `fmp4.c` still flags a sync sample once a second, in `tfhd`. That's harmless, and right for players that honour it.
+- The trim only works because D7 makes the sender send real IDRs.
+
+## D7. Ask the sender for keyframes: forceKeyFrame on the event channel (2026-11-07)
+
+**Decision:**
+- Our UxPlay fork (`regulad/UxPlay`, branch `rosella`) returns a real `eventPort` in the first SETUP response and accepts the sender's connection to it.
+- `raop_request_keyframe()` sends `POST /command` with the plist `{type: "forceKeyFrame"}`.
+- The app asks every 10 s while video plays (`KEYFRAME_EVERY_TICKS` in `App.tsx`).
 
 **Why:**
-- iOS and macOS send one keyframe per mirroring session.
-- MSE keeps already-played compressed video for seeking, and discards it only in whole runs from one sync sample to the next. Vega's media library hard-codes a 100 MB eviction threshold (`DEFAULT_EVICTION_THRESHOLD`, OS-provided JS).
-- With no evictable runs, the `SourceBuffer` filled after about 2 minutes of a Mac's 8 Mbit/s: `QuotaExceededError`, then a frozen picture. The iPhone stall at about 6 minutes was the same thing.
-- **The flag was in the wrong box.** Vega's player ignores `trun`'s per-sample fields, `first-sample-flags` as well as durations. Flagging in `trun` alone meant the player saw no sync sample at all, the real IDR included.
-- **Vega's player doesn't evict played video at all,** even with sync samples it can see: `video.buffer_behind` grew in a straight line to the quota. So `MirrorPlayer` removes played video more than 10 s behind the playhead every 5 s, as live MSE players do (hls.js's `backBufferLength`).
-- That trim only works with the flags in `tfhd`. Before, a `remove()` behind the playhead cascaded to the next sync sample the player knew of. There was none, so it removed everything, including the frames about to play.
-- The decoder never needs old compressed frames. A P-frame refers to decoded pictures in the decoder's own reference buffer. Flagging a P-frame as a sync sample only tells MSE where it may cut.
+- Without real IDRs, D6's trim can't work. Apple's CarPlay receivers send this request (`_AirPlayReceiverSessionForceKeyFrame`); UxPlay advertised `eventPort = 0`, so it had never been tried on ordinary mirroring.
+- Tested on 2026-11-07, both sending one IDR per request and both answering in plain text (`RTSP/1.0 200 OK`) with no event-channel encryption:
+  - macOS 11.7.11 (AirPlay/550.10)
+  - iOS 27.0.1 (AirPlay/980.77.1)
+- With it, played video in the buffer held at about 9.5 s, video buffered ahead at about 0.5–0.65 s, and there were no stalls. No visible hitch at each IDR.
 
 **Implications:**
-- The flag claims a P-frame is a safe place to start decoding, which isn't strictly true. If the player ever restarts decoding at one of these frames, after a seek or a detected discontinuity, expect a moment of smearing until the references rebuild. Today the alternative is a black screen until the next real keyframe, which may never come.
-- Never seek the live stream.
-- The GOP cache for rebuilding a stalled player (`fmp4_resync`) still goes by real IDRs.
+- Each forced IDR comes with a codec (SPS/PPS) packet that libairplay reports as `video_pause`/`video_resume`. That's noise.
+- If a sender refuses the request (CarPlay senders are known to), video freezes when the buffer fills again. The app reports "keyframe request not sent", and a stall warning when that happens.
+- The 10 s interval must stay below `MirrorPlayer`'s 10 s back buffer plus its 5 s trim period.

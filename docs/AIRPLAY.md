@@ -12,11 +12,13 @@ These are findings about AirPlay senders and libairplay (UxPlay's `lib/`), seen 
 - **Logged but harmless:** `Unhandled RTSP request "audioMode: moviePlayback"` repeats every few seconds while a Mac or iPhone plays video.
 - **Volume** (`audio_set_volume`) is in dB, from -30 to 0, with -144 meaning mute.
 
+- **Event channel (our fork):** the first SETUP response returns a real `eventPort`, the sender connects to it, and `POST /command {type: "forceKeyFrame"}` gets an IDR within a frame or two. iOS 27 and macOS 11 accept it in plain text. Each IDR comes with a codec (SPS/PPS) packet that libairplay reports as `video_pause`/`video_resume`. See DECISIONS.md D7.
+
 ## iOS (iPhone18,1, User-Agent AirPlay/980.77.1)
 
 - **Video:** mirrors at up to 60 fps, at the screen's aspect ratio (498×1080 in portrait), dropping to 20–45 fps when little changes.
   - The SPS has **no VUI timing**.
-  - It sends **one keyframe (IDR) per session**: one in a 9-minute run. A new decoder can't start mid-session; the only ways to get a fresh IDR are a rotation or a new session.
+  - Left alone, it sends **one keyframe (IDR) per session**: one in a 9-minute run. It sends another on a rotation, a new session, or a `forceKeyFrame` request on the event channel.
 - **Audio:**
   - AAC-ELD (`ct=8`, 480 samples per packet, ~92 packets/s) while mirroring
   - ALAC (`ct=2`) for audio-only (music)
@@ -31,6 +33,7 @@ These are findings about AirPlay senders and libairplay (UxPlay's `lib/`), seen 
 ## macOS (MacBook8,1, User-Agent AirPlay/550.10)
 
 - **Video:** a full-screen video is mirrored at the **content's frame rate** (~24 fps for a film) at 1280×720, at 3–10 Mbit/s. So frame durations can't be assumed to be 1/60 s.
+  - Like iOS, it sends IDRs only when asked (`forceKeyFrame`) or when the display mode changes, e.g. on leaving QuickTime's full screen.
   - Two keyframes were seen in a short session.
 - **Audio:** AAC-ELD, as on iOS.
 - **Connections:** it connects over both IPv6 and IPv4 at once, then drops one of them (`conn_init` twice, then a `conn_destroy`).

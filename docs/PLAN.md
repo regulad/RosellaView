@@ -165,7 +165,7 @@ Exit criteria: pick a video backend, an audio backend and a latency budget. Reco
 
 This follows the Blackb0x-- precedent.
 
-- `third_party/UxPlay` points at our fork `https://github.com/regulad/UxPlay.git`, branch `rosella`. That's upstream `master` at `05b0275` (2026-11-06), because `lib/mdnsd` isn't in a release yet, plus one commit adding `report_client_details` (the sender's OS and AirPlay versions, for crash reports). Rebase `rosella` onto the first release tag that contains `mdnsd` when one appears, and offer the callback upstream.
+- `third_party/UxPlay` points at our fork `https://github.com/regulad/UxPlay.git`, branch `rosella`. That's upstream `master` at `05b0275` (2026-11-06), because `lib/mdnsd` isn't in a release yet, plus two commits: `report_client_details` (the sender's OS and AirPlay versions, for crash reports), and the event channel with `raop_request_keyframe()` (DECISIONS.md D7). Rebase `rosella` onto the first release tag that contains `mdnsd` when one appears, and offer both upstream.
 - As soon as any change inside UxPlay is needed (expected: build-system tweaks for the Vega toolchain, maybe a hook in `lib/` for codec advertisement), **fork to `regulad/UxPlay`** on a `rosella` branch, keep the diff small and clean, and point `.gitmodules` at the fork with `branch = rosella`. Never leave uncommitted patches in the submodule.
 - Tell FDH2 (UxPlay's maintainer) about the port early, be upfront that it's a paid-unlock app built on his work, and offer portability patches back.
 - Add more submodules as needed: `third_party/libplist` (libimobiledevice, LGPL-2.1+), `third_party/openssl` (3.x LTS tag), `third_party/ffmpeg` (LGPL configuration, decoders only), and `third_party/node-api-headers` (MIT).

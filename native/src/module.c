@@ -205,6 +205,12 @@ static napi_value js_resync_video(napi_env env, napi_callback_info info) {
     return make_bool(env, receiver_video_resync() == 0);
 }
 
+/* requestKeyframe() → true if a keyframe request went to the sender */
+static napi_value js_request_keyframe(napi_env env, napi_callback_info info) {
+    (void)info;
+    return make_bool(env, receiver_request_keyframe() == 0);
+}
+
 /* canResyncVideo() → true if resyncVideo() would replay a GOP */
 static napi_value js_can_resync_video(napi_env env, napi_callback_info info) {
     (void)info;
@@ -265,6 +271,7 @@ static napi_value module_init(napi_env env, napi_value exports) {
         {"isRunning", NULL, js_is_running, NULL, NULL, NULL, napi_default, NULL},
         {"resyncVideo", NULL, js_resync_video, NULL, NULL, NULL, napi_default, NULL},
         {"canResyncVideo", NULL, js_can_resync_video, NULL, NULL, NULL, napi_default, NULL},
+        {"requestKeyframe", NULL, js_request_keyframe, NULL, NULL, NULL, napi_default, NULL},
         {"setSentryEnvelopeListener", NULL, js_set_sentry_listener, NULL, NULL, NULL, napi_default, NULL},
         {"sentryInit", NULL, js_sentry_init, NULL, NULL, NULL, napi_default, NULL},
         {"takeDevFlag", NULL, js_take_dev_flag, NULL, NULL, NULL, napi_default, NULL},

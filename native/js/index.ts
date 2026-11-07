@@ -18,6 +18,7 @@ interface NativeReceiver {
   isRunning(): boolean;
   resyncVideo(): boolean;
   canResyncVideo(): boolean;
+  requestKeyframe(): boolean;
   setSentryEnvelopeListener(listener: ((kind: number, envelope: ArrayBuffer) => void) | null): boolean;
   sentryInit(dsn: string, release: string, dist: string, environment: string): boolean;
   takeDevFlag(name: string): boolean;
@@ -52,6 +53,8 @@ export const Receiver = {
   resyncVideo: (): boolean => native.resyncVideo(),
   /** Whether resyncVideo() has a GOP to replay (iOS may send only one keyframe per session). */
   canResyncVideo: (): boolean => native.canResyncVideo(),
+  /** Asks the sender for an IDR frame over the AirPlay event channel; true if sent. */
+  requestKeyframe: (): boolean => native.requestKeyframe(),
   /**
    * Native crash reporting (sentry-native). Set the envelope listener first:
    * reports of a crash in the previous run are sent during init.

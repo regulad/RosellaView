@@ -31,6 +31,9 @@ function airplayVolume(db: number): number {
   return Math.pow(10, Math.min(0, db) / 20);
 }
 const SCREEN = Dimensions.get('window');
+// Stats run every 5 s; a keyframe is requested every other tick (10 s), inside
+// MirrorPlayer's 10 s back buffer.
+const KEYFRAME_EVERY_TICKS = 2;
 
 
 /** Largest box of the video's aspect ratio that fits the screen, centred. */
@@ -162,10 +165,17 @@ export const App = () => {
 
     log(`start(${RECEIVER_BASE_NAME}) -> ${Receiver.start(RECEIVER_BASE_NAME)}`);
     keepAwake.current.set(true);
+    let statsTicks = 0;
     const stats = setInterval(() => {
       const s = Receiver.stats();
       if ((s.connections as number) > 0) {
         receiverStats(s, player.current?.metrics() ?? null, audio.current?.metrics() ?? null);
+        // iOS and macOS send one IDR per session unless asked; the player can
+        // only drop played video (MirrorPlayer.trim) back to an IDR, so ask
+        // for one every KEYFRAME_EVERY_TICKS (DECISIONS.md D7).
+        if (player.current && ++statsTicks % KEYFRAME_EVERY_TICKS === 0 && !Receiver.requestKeyframe()) {
+          warn('keyframe request not sent (no event channel)');
+        }
       }
     }, 5000);
     return () => {

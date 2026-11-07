@@ -643,6 +643,14 @@ int receiver_video_resync(void) {
     return rc;
 }
 
+int receiver_request_keyframe(void) {
+    int rc = -1;
+    pthread_mutex_lock(&g_lock);
+    if (g_raop) rc = raop_request_keyframe(g_raop);
+    pthread_mutex_unlock(&g_lock);
+    return rc;
+}
+
 int receiver_video_can_resync(void) {
     int ok = 0;
     pthread_mutex_lock(&g_mux_lock);
