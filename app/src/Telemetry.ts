@@ -89,9 +89,19 @@ export function receiverEvent(e: ReceiverEvent): void {
       setTag('sender.airplay_version', String(e.source_version));
       break;
     }
-    case 'video_init':
-      setContext('video', {width: e.width, height: e.height, sender_sps: e.sender_sps});
+    case 'video_init': {
+      // H.264 level from the sender's SPS (byte 3): iOS's full-frame video
+      // mode uses 4.0 (1080p up to ~30 fps) or 4.2 (up to ~60), so this tells
+      // which encoder setting was active.
+      const sps = String(e.sender_sps ?? '');
+      const level = sps.length >= 8 ? parseInt(sps.slice(6, 8), 16) / 10 : NaN;
+      setContext('video', {width: e.width, height: e.height, sender_sps: sps, level});
+      if (Number.isFinite(level)) {
+        senderAttributes['video.level'] = String(level);
+        setTag('video.level', String(level));
+      }
       break;
+    }
     case 'audio_format':
       setContext('audio', {ct: e.ct, samples_per_frame: e.spf, using_screen: e.using_screen, format: e.format});
       setTag('audio.ct', String(e.ct));
@@ -153,6 +163,13 @@ export function receiverStats(
     });
   }
   previous = {t: now, s: {...cur}};
+  // The sender's own frame rate, from its timestamps over this window: precise
+  // enough to tell 29.97 (every other frame of a 59.94 source) from 30.00.
+  if (typeof cur.sender_frames === 'number' && cur.sender_span_ms > 0) {
+    metrics.gauge('video.sender_fps', ((cur.sender_frames - 1) * 1000) / cur.sender_span_ms, {attributes});
+    metrics.gauge('video.interval_min', cur.sender_gap_min_ms, {unit: 'millisecond', attributes});
+    metrics.gauge('video.interval_max', cur.sender_gap_max_ms, {unit: 'millisecond', attributes});
+  }
   // System and process figures; each is null when the sandbox can't provide
   // it (native/src/receiver.c system_stats), and then isn't reported.
   const has = (k: string) => typeof cur[k] === 'number' && cur[k] >= 0;

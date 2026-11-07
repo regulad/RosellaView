@@ -52,6 +52,16 @@ static raop_t *g_raop;
 static dnssd_t *g_dnssd;
 
 static atomic_uint_fast64_t g_video_frames, g_video_bytes, g_audio_packets, g_audio_bytes;
+
+/* Sender frame timing over the current stats window (read and reset by
+ * receiver_stats_json): its frame count, the span of its sender timestamps,
+ * and the shortest and longest gap between frames. From these the sender's
+ * real frame rate, which a frame count over a few seconds can't resolve
+ * (29.97 against 30.00). */
+static pthread_mutex_t g_timing_lock = PTHREAD_MUTEX_INITIALIZER;
+static struct {
+    uint64_t frames, first_ns, last_ns, min_gap_ns, max_gap_ns;
+} g_timing;
 static atomic_int g_audio_ct;
 static atomic_int g_connections;
 
@@ -253,6 +263,22 @@ static void cb_report_client_details(void *cls, const char *os_name, const char 
 static void cb_video_process(void *cls, raop_ntp_t *ntp, video_decode_struct *data) {
     (void)cls;
     (void)ntp;
+    pthread_mutex_lock(&g_timing_lock);
+    if (data->ntp_time_remote) {
+        uint64_t t = data->ntp_time_remote;
+        if (g_timing.frames == 0) {
+            g_timing.first_ns = t;
+            g_timing.min_gap_ns = UINT64_MAX;
+            g_timing.max_gap_ns = 0;
+        } else if (t > g_timing.last_ns) {
+            uint64_t gap = t - g_timing.last_ns;
+            if (gap < g_timing.min_gap_ns) g_timing.min_gap_ns = gap;
+            if (gap > g_timing.max_gap_ns) g_timing.max_gap_ns = gap;
+        }
+        g_timing.last_ns = t;
+        g_timing.frames++;
+    }
+    pthread_mutex_unlock(&g_timing_lock);
     if (atomic_fetch_add(&g_video_frames, 1) == 0) {
         emit("{\"type\":\"first_video_frame\",\"h265\":%s,\"nal_count\":%d,\"bytes\":%d}",
              data->is_h265 ? "true" : "false", data->nal_count, data->data_len);
@@ -796,6 +822,24 @@ char *receiver_stats_json(void) {
     if (g_audio) concealed = audio_concealed(g_audio);
     pthread_mutex_unlock(&g_audio_lock);
     system_stats(sys, sizeof sys);
+    {
+        /* The sender's frame timing for this window, then a new window. */
+        char *q = sys + strlen(sys);
+        size_t left = sizeof sys - strlen(sys);
+        pthread_mutex_lock(&g_timing_lock);
+        if (g_timing.frames >= 2 && g_timing.last_ns > g_timing.first_ns) {
+            put_num(&q, &left, "sender_frames", (double)g_timing.frames);
+            put_num(&q, &left, "sender_span_ms", (double)(g_timing.last_ns - g_timing.first_ns) / 1e6);
+            put_num(&q, &left, "sender_gap_min_ms", (double)g_timing.min_gap_ns / 1e6);
+            put_num(&q, &left, "sender_gap_max_ms", (double)g_timing.max_gap_ns / 1e6);
+            /* the next window starts at this window's last frame */
+            g_timing.first_ns = g_timing.last_ns;
+            g_timing.frames = 1;
+            g_timing.min_gap_ns = UINT64_MAX;
+            g_timing.max_gap_ns = 0;
+        }
+        pthread_mutex_unlock(&g_timing_lock);
+    }
     if (asprintf(&json,
                  "{\"running\":%s,\"connections\":%d,\"video_frames\":%" PRIuFAST64 ",\"video_bytes\":%" PRIuFAST64
                  ",\"audio_packets\":%" PRIuFAST64 ",\"audio_bytes\":%" PRIuFAST64 ",\"audio_ct\":%d,\"audio_concealed_ms\":%" PRIu64 ",\"keyframes\":%" PRIu64
