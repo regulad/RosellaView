@@ -149,8 +149,8 @@ export const About = ({compatibilityMode, onCompatibilityMode, onClose}: Props) 
           }}
         </Pressable>
         <Text style={styles.small}>
-          Plays mirrored video through the TV's standard video player. Try it if the picture doesn't appear. With it
-          on, the darkest and lightest shades from iPhones and iPads can merge.
+          Plays mirrored video through the TV's standard video player. Try it if the picture doesn't appear. The
+          brightest highlights and the darkest shadows will lose fidelity when this option is on.
         </Text>
       </ScrollView>
       <Text style={styles.hint}>{atEnd ? 'Press Back to return.' : '▼ Scroll down · Back to return'}</Text>
