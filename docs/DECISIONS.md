@@ -212,3 +212,18 @@ The laptop's `create_ap` AP now runs with `IEEE80211N=1`, started via `create_ap
 - **iOS** has no AirPlay setting to send limited range.
 - **A native video surface** with our own rendering, or a player that honours the flag, could fix it. That's next to investigate.
 - **Ask Amazon** whether there's a supported way to signal full range to the MSE player.
+
+## D10. APMF interface glue is a System Library; build native components with the SDK (2026-11-07)
+
+**Decision:** Native UI components (for a native video surface) are built the normal way: the SDK's IDL import libraries and generated glue, calling the OS's `libapmf.so`. No clean-room re-implementation, and no linking exception from the GPL authors.
+
+**Why:**
+- GPLv3 §1 excludes from Corresponding Source any System Library: one that is "included in the normal form of packaging a Major Component" (Vega OS) and "serves only to enable use of the work with that Major Component".
+- The generated glue is thin interface code (vtable thunks, interface hashes, call shims) that only calls the OS. It's the same role as OS SDK headers and import stubs, which GPL programs routinely compile in: Windows SDK, macOS SDK.
+- Bundled vendor *libraries* with their own functionality are different, and stay excluded: Vega's static `libturbomoduleAPI.a`, Google Play Services client libraries (research `06-gpl-linking-shims.md`).
+- **Owner's call:** a vanishing risk, fully defensible, and it greatly simplifies the work.
+
+**Implications:**
+- The glue source isn't distributed (System Libraries are excluded from Corresponding Source), which also fits the SDK's confidentiality terms.
+- A one-line note for the lawyer review, next to playfair.
+- The existing Node-API module stays as it is.
