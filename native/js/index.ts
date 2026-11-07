@@ -21,8 +21,6 @@ interface NativeReceiver {
   requestKeyframe(): boolean;
   setSentryEnvelopeListener(listener: ((kind: number, envelope: ArrayBuffer) => void) | null): boolean;
   sentryInit(dsn: string, release: string, dist: string, environment: string): boolean;
-  takeDevFlag(name: string): boolean;
-  crashForTest(): boolean;
   setWatermark(on: boolean): boolean;
   getStats(): string;
   setVideoLatency(ms: number): boolean;
@@ -89,10 +87,6 @@ export const Receiver = {
   },
   sentryInit: (dsn: string, release: string, dist: string, environment: string): boolean =>
     native.sentryInit(dsn, release, dist, environment),
-  /** Development: true once if /scratch/dev-<name> exists (create it from the component shell). */
-  takeDevFlag: (name: string): boolean => native.takeDevFlag(name),
-  /** Development: crashes the native module, to test crash reporting. */
-  crashForTest: (): boolean => native.crashForTest(),
   /** Audio carries a spoken "Preview." every 5 s while on (the default). */
   setWatermark: (on: boolean): boolean => native.setWatermark(on),
   /** Native video: how long after capture frames are shown (ms). */

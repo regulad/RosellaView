@@ -4,7 +4,7 @@ A RosellaSoftware app, published by Parker Wahle <regulad@regulad.xyz>: a screen
 
 ## Conventions (don't re-litigate without asking)
 
-- **The UI is as small as possible.** It has an idle screen ("Open Screen Mirroring and select <name>" plus a single "Remove watermark" button), the mirroring screen, and the bouncing 80%-opacity watermark until the IAP entitlement is owned. No settings screens or menus. Add UI only when the owner asks.
+- **The UI is as small as possible.** It has an idle screen ("Open Screen Mirroring and select <name>", a single "Remove watermark" button, and a small grey underlined "About & privacy" link), the mirroring screen with its audio-delay overlay, and the bouncing 80%-opacity watermark until the IAP entitlement is owned. The About screen (`app/src/About.tsx`) holds the licence and privacy notices and the one setting, Compatibility Mode (MSE video). No other settings or menus. Add UI only when the owner asks.
 - **GPL compliance is the rule.** The binary contains third-party GPLv3 code: `lib/playfair` (Esteban Kubata) and `lib/crypto.c` (RPiPlay: Florian Draschbacher, Jaslo Ziska; modified by F. Duncanh).
   - Nothing GPL-incompatible goes in unless it's a System Library (GPLv3 §1).
   - **System Libraries:** the OS's libraries loaded at runtime (`libkeplerscript.so`, `libapmf.so`, …), and the SDK's *generated interface glue* for calling them (APMF IDL import libraries, `kepler_add_idl_import_library`). That glue serves only to use the OS, like OS SDK headers and import stubs (DECISIONS.md D10).
@@ -51,6 +51,4 @@ Its uploads need `sentry-cli login`; the token needs `project:write`, `org:read`
   - playback stats as metrics, every 5 s while connected
   - sessions, for release health
 - **Native** (`native/src/sentry.c`) uses sentry-native with the inproc backend. Crashes go into `/data/rosellaview/sentry` and are sent on the next launch, through JS (`Receiver.onSentryEnvelope`); there's no native HTTP. On armv7, an `on_crash` hook rebuilds the stack from pc, lr and a stack scan, because sentry-native's unwinder gets nothing usable there.
-- **Development hooks** (remove before submission): from the component shell, `touch /scratch/dev-js-error` or `/scratch/dev-native-crash`, then relaunch. The app throws, or crashes natively, 5 s after start, to test the whole path.
-  - `touch /scratch/dev-mse-video`: use the MSE video fallback instead of the native pipeline (DECISIONS.md D12).
-  - The native surface logs to `/scratch/rosella-surface.log` (read it from the component shell).
+- **No development hooks ship.** The crash and error test hooks were removed before submission (in git history before the About screen commit, should they be needed again). The native surface's status lines arrive as `native_status` receiver events, so they're in Sentry's logs.

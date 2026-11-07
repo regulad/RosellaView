@@ -245,19 +245,6 @@ static napi_value js_sentry_init(napi_env env, napi_callback_info info) {
     return make_bool(env, rv_sentry_init(dsn, release, dist, environment) == 0);
 }
 
-/* takeDevFlag(name) → true if /scratch/dev-<name> existed (it's removed) */
-static napi_value js_take_dev_flag(napi_env env, napi_callback_info info) {
-    char name[64];
-    return make_bool(env, string_arg(env, info, name, sizeof name) && receiver_take_dev_flag(name));
-}
-
-/* crashForTest(): a deliberate native crash */
-static napi_value js_crash_for_test(napi_env env, napi_callback_info info) {
-    (void)info;
-    receiver_crash_for_test();
-    return make_bool(env, 0);
-}
-
 static napi_value js_is_running(napi_env env, napi_callback_info info) {
     (void)info;
     return make_bool(env, receiver_is_running());
@@ -304,8 +291,6 @@ static napi_value module_init(napi_env env, napi_value exports) {
         {"requestKeyframe", NULL, js_request_keyframe, NULL, NULL, NULL, napi_default, NULL},
         {"setSentryEnvelopeListener", NULL, js_set_sentry_listener, NULL, NULL, NULL, napi_default, NULL},
         {"sentryInit", NULL, js_sentry_init, NULL, NULL, NULL, napi_default, NULL},
-        {"takeDevFlag", NULL, js_take_dev_flag, NULL, NULL, NULL, napi_default, NULL},
-        {"crashForTest", NULL, js_crash_for_test, NULL, NULL, NULL, napi_default, NULL},
         {"setWatermark", NULL, js_set_watermark, NULL, NULL, NULL, napi_default, NULL},
         {"getStats", NULL, js_get_stats, NULL, NULL, NULL, napi_default, NULL},
         {"setVideoLatency", NULL, js_set_video_latency, NULL, NULL, NULL, napi_default, NULL},

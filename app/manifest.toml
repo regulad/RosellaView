@@ -52,13 +52,6 @@ id = "com.amazon.devconf.privilege.accessibility"
 [[wants.module]]
 id = "/com.amazon.kepler.net.net_manager@INetManager"
 
-# IAP App Tester (sandbox mode) for development; inert without it installed.
-[[wants.service]]
-id = "com.amazon.iap.tester.service"
-
-[[wants.module]]
-id = "/com.amazonappstore.iap.tester@IIAPTesterUI"
-
 [components]
 [[components.interactive]]
 id = "xyz.regulad.rosellaview.main"

@@ -15,7 +15,7 @@
  * for the rest of the session (DECISIONS.md D8).
  *
  * The viewer can add an audio delay (AvDelayOverlay) for what the timestamps
- * don't capture. It's kept per sender device, with defaults by kind.
+ * don't capture. It's kept per sender device.
  *
  * Copyright (C) 2026 Parker Wahle
  * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -55,9 +55,9 @@ const AV_MIN_AUDIO_AHEAD_MS = 300;
 export const AV_DELAY_MIN_MS = -500;
 export const AV_DELAY_MAX_MS = 500;
 const DELAY_KEY = 'avDelayMs:'; // + the sender's AirPlay device ID
-// Measured by eye on a Fire TV Stick 4K Select (2026-11-07). With MSE video an
-// iPhone needed +300 ms; with native video (D12) it matches at 0, like a Mac.
-const DEFAULT_DELAY_MS: Record<string, number> = {iPhone: 0, iPad: 0, Mac: 0};
+// With native video (D12) iPhones, iPads and Macs all match at 0 by eye
+// (Fire TV Stick 4K Select, 2026-11-07). (MSE video wanted +300 ms for iOS.)
+const DEFAULT_DELAY_MS = 0;
 
 export class AvSync {
   private bad = 0;
@@ -75,13 +75,10 @@ export class AvSync {
   /** Latest offset from the target (ms; negative: audio late), or NaN. */
   offsetMs = NaN;
 
-  /**
-   * A sender connected: use its saved delay, or the default for its kind
-   * ('iPhone', 'iPad', 'Mac', …). Resolves with the delay in use.
-   */
-  async useSender(deviceId: string, kind: string): Promise<number> {
+  /** A sender connected: use its saved delay, or the default. Resolves with the delay in use. */
+  async useSender(deviceId: string): Promise<number> {
     this.senderId = deviceId;
-    let ms = DEFAULT_DELAY_MS[kind] ?? 0;
+    let ms = DEFAULT_DELAY_MS;
     try {
       const saved = await AsyncStorage.getItem(DELAY_KEY + deviceId);
       if (saved !== null && Number.isFinite(Number(saved))) {

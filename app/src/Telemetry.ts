@@ -57,9 +57,6 @@ export function receiverEvent(e: ReceiverEvent): void {
     data: isLibLog ? undefined : data,
     level: isLibLog && (e.level as number) <= 3 ? 'error' : 'info',
   });
-  if (!isLibLog || (e.level as number) <= 5) {
-    console.log(`ROSELLAVIEW ${JSON.stringify(e)}`);
-  }
   logger.info(isLibLog ? `libairplay: ${String(e.msg)}` : `receiver ${type}`, {...senderAttributes, ...flatten(data)});
 
   switch (type) {

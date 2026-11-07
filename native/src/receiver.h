@@ -55,12 +55,6 @@ void receiver_video_restart(void);
 int receiver_request_keyframe(void);
 
 
-/* Development hooks: removes /scratch/dev-<name> and returns 1 if it existed
- * (create it from the component shell); and a deliberate native crash, to
- * check that crash reports arrive. */
-int receiver_take_dev_flag(const char *name);
-void receiver_crash_for_test(void);
-
 /* Native video (rosella_video.h): the capture-to-screen latency the
  * consumer aims for, in ms; and its state as a JSON string (caller frees). */
 void receiver_set_video_latency(int ms);

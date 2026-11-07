@@ -314,6 +314,12 @@ ROSELLA_EXPORT int rosella_video_request_keyframe(void) { return receiver_reques
 
 ROSELLA_EXPORT int rosella_video_latency_ms(void) { return atomic_load(&g_native_latency_ms); }
 
+ROSELLA_EXPORT void rosella_video_status(const char *message) {
+    char *m = json_escape(message);
+    emit("{\"type\":\"native_status\",\"message\":\"%s\"}", m ? m : "");
+    free(m);
+}
+
 ROSELLA_EXPORT void rosella_video_report(const rosella_video_stats *stats) {
     pthread_mutex_lock(&g_native_stats_lock);
     g_native_stats = *stats;
@@ -876,17 +882,6 @@ int receiver_request_keyframe(void) {
     if (g_raop) rc = raop_request_keyframe(g_raop);
     pthread_mutex_unlock(&g_lock);
     return rc;
-}
-
-int receiver_take_dev_flag(const char *name) {
-    char path[128];
-    snprintf(path, sizeof path, "/scratch/dev-%s", name);
-    return unlink(path) == 0;
-}
-
-void receiver_crash_for_test(void) {
-    volatile int *p = NULL;
-    *p = 1;
 }
 
 /* Value of "key:" (in kB) in a /proc file such as /proc/self/status, or -1. */

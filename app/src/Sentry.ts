@@ -159,17 +159,6 @@ export function initSentry(): void {
 
   startSession();
   captureSession();
-
-  // Development hooks, to check reporting end to end on the device:
-  // touch /scratch/dev-js-error or /scratch/dev-native-crash from the component shell.
-  setTimeout(() => {
-    if (Receiver.takeDevFlag('js-error')) {
-      throw new Error('RosellaView test error (dev flag)');
-    }
-    if (Receiver.takeDevFlag('native-crash')) {
-      flush(2000).then(() => Receiver.crashForTest());
-    }
-  }, 5000);
 }
 
 type Handler = (error: unknown, isFatal?: boolean) => void;

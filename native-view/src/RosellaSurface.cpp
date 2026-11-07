@@ -25,9 +25,10 @@
  * capture time on our clock, from libairplay's NTP sync). JS sets the latency
  * (Receiver.setVideoLatency) so the picture matches the audio player.
  *
- * Status goes to JS as onStatus events (state "ready" once the decoder works,
- * "failed" if it can't, so the app falls back to MSE) and to
- * /scratch/rosella-surface.log (read it from the component shell).
+ * Status lines go to JS as "native_status" receiver events, through the
+ * bridge. (onStatus view events emitted from here never reached JS.) JS
+ * falls back to MSE if the surface doesn't attach to the receiver, which it
+ * does only once the decoder works, or detaches during a session.
  *
  * Copyright (C) 2026 Parker Wahle
  * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -40,7 +41,6 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
-#include <cstdio>
 #include <cstring>
 #include <deque>
 #include <exception>
@@ -84,17 +84,11 @@
 #include <apmf/iface/com/amazon/kepler/graphics/RenderingCapabilities.h>
 #include <apmf/iface/com/amazon/kepler/uitoolkit/react/IContext.h>
 #include <apmf/iface/com/amazon/kepler/uitoolkit/react/IContextDelegate.h>
-#include <apmf/iface/com/amazon/kepler/uitoolkit/react/IEventEmitter.h>
 #include <apmf/iface/com/amazon/kepler/uitoolkit/react/IFrame.h>
-#include <apmf/iface/com/amazon/kepler/uitoolkit/react/IJsObject.h>
-#include <apmf/iface/com/amazon/kepler/uitoolkit/react/IJsObjectBuilder.h>
 #include <apmf/iface/com/amazon/kepler/uitoolkit/react/ILayout.h>
 #include <apmf/iface/com/amazon/kepler/uitoolkit/react/ILayoutDelegate.h>
-#include <apmf/iface/com/amazon/kepler/uitoolkit/react/IPayloadDelegate.h>
 #include <apmf/iface/com/amazon/kepler/uitoolkit/react/IViewManager.h>
 #include <apmf/iface/com/amazon/kepler/uitoolkit/react/IViewManagerFactory.h>
-#include <apmf/iface/com/amazon/kepler/uitoolkit/view/IFrameEvent.h>
-#include <apmf/iface/com/amazon/kepler/uitoolkit/view/IFrameEventListener.h>
 #include <apmf/iface/com/amazon/kepler/uitoolkit/view/IKeplerMediaSurfaceProvider.h>
 #include <apmf/iface/com/amazon/kepler/uitoolkit/view/ISurfaceView.h>
 #include <apmf/iface/com/amazon/kepler/uitoolkit/view/ISurfaceViewListener.h>
@@ -148,15 +142,6 @@ static uint64_t realtimeNs() {
   return (uint64_t)t.tv_sec * 1'000'000'000ull + (uint64_t)t.tv_nsec;
 }
 
-// Development log, readable from the component shell (an app's syslog and
-// stderr don't reach loggingctl).
-static void fileLog(std::string const& message) {
-  if (FILE* f = std::fopen("/scratch/rosella-surface.log", "a")) {
-    std::fprintf(f, "%s\n", message.c_str());
-    std::fclose(f);
-  }
-}
-
 // ---------------------------------------------------------------------------
 // The receiver's side of the bridge, looked up in libRosellaView.so.
 
@@ -165,6 +150,7 @@ struct Bridge {
   rosella_video_request_keyframe_fn requestKeyframe = nullptr;
   rosella_video_latency_ms_fn latencyMs = nullptr;
   rosella_video_report_fn report = nullptr;
+  rosella_video_status_fn status = nullptr;
 
   bool load() {
     void* lib = dlopen(ROSELLA_VIDEO_LIBRARY, RTLD_NOW | RTLD_NOLOAD);
@@ -176,7 +162,8 @@ struct Bridge {
     requestKeyframe = reinterpret_cast<rosella_video_request_keyframe_fn>(sym("rosella_video_request_keyframe"));
     latencyMs = reinterpret_cast<rosella_video_latency_ms_fn>(sym("rosella_video_latency_ms"));
     report = reinterpret_cast<rosella_video_report_fn>(sym("rosella_video_report"));
-    return attach && requestKeyframe && latencyMs && report;
+    status = reinterpret_cast<rosella_video_status_fn>(sym("rosella_video_status"));
+    return attach && requestKeyframe && latencyMs && report && status;
   }
 };
 
@@ -196,17 +183,15 @@ struct AccessUnit {
 struct SurfaceState {
   std::mutex mutex;
   std::condition_variable wake;
-  std::deque<std::pair<std::string, std::string>> messages;  // (state, message) to JS
   std::thread thread;
+  std::atomic<rosella_video_status_fn> statusSink{nullptr};  // set once the bridge is found
   bool stop = false;
   // From the mirroring thread.
   std::deque<AccessUnit> units;
   bool reset = false;
 
-  void status(std::string message, std::string state = "") {
-    fileLog(message);
-    std::lock_guard<std::mutex> lock(mutex);
-    messages.emplace_back(std::move(state), std::move(message));
+  void status(std::string const& message) {
+    if (auto sink = statusSink.load()) sink(("RosellaSurface: " + message).c_str());
   }
 };
 
@@ -569,17 +554,15 @@ struct Ready {
 
 static void renderThread(std::shared_ptr<SurfaceState> state, Ptr<kg::IMediaSurface> media) {
   Bridge bridge;
-  if (!bridge.load()) {
-    state->status("the receiver's video bridge wasn't found", "failed");
-    return;
-  }
+  if (!bridge.load()) return;  // nothing to report to; JS falls back to MSE
+  state->statusSink = bridge.status;
   Renderer r;
   try {
     auto graphics = apmf::GetProcessObject()
                         ->getComponent("/com.amazon.kepler.graphics")
                         .TryQueryInterface<kg::IGraphicsModule>();
     if (!graphics) {
-      state->status("no /com.amazon.kepler.graphics IGraphicsModule", "failed");
+      state->status("no /com.amazon.kepler.graphics IGraphicsModule");
       return;
     }
     auto display = graphics->createDisplayControllerForSystemClients(nullptr);
@@ -588,7 +571,7 @@ static void renderThread(std::shared_ptr<SurfaceState> state, Ptr<kg::IMediaSurf
     auto context = gpu->createContext(nullptr, config);
     Ptr<kg::IGraphicsSurface> surface;
     if (!setUpGl(*state, graphics, gpu, context, config, surface, r)) {
-      state->status("GL setup failed", "failed");
+      state->status("GL setup failed");
       return;
     }
 
@@ -596,7 +579,7 @@ static void renderThread(std::shared_ptr<SurfaceState> state, Ptr<kg::IMediaSurf
     // A first decoder at the display's size proves the platform still offers
     // it; it's reopened at the stream's own size when its SPS arrives.
     if (!decoder.open(kTargetWidth, kTargetHeight)) {
-      state->status("hardware decoder unavailable", "failed");
+      state->status("hardware decoder unavailable");
       return;
     }
 
@@ -608,7 +591,7 @@ static void renderThread(std::shared_ptr<SurfaceState> state, Ptr<kg::IMediaSurf
 
     rosella_video_consumer consumer{state.get(), onFrame, onReset};
     bridge.attach(&consumer);
-    state->status("native video ready", "ready");
+    state->status("native video ready");
 
     std::deque<AccessUnit> feeding;   // due, waiting for a decoder input buffer
     std::map<uint64_t, Timing> inFlight;  // by pts
@@ -873,22 +856,14 @@ static void renderThread(std::shared_ptr<SurfaceState> state, Ptr<kg::IMediaSurf
     state->status("render thread stopped after " + std::to_string(stats.shown) + " pictures");
   } catch (std::exception const& e) {
     bridge.attach(nullptr);
-    state->status(std::string("render thread error: ") + e.what(), "failed");
+    state->status(std::string("render thread error: ") + e.what());
   }
 }
 
 // ---------------------------------------------------------------------------
 // UI thread: surface lifecycle and status events.
 
-struct StatusPayload : ApmfBase<StatusPayload, rx::IPayloadDelegate> {
-  StatusPayload(std::string state, std::string message) : state_(std::move(state)), message_(std::move(message)) {}
-  Ptr<rx::IJsObject> getPayload(View<rx::IJsObjectBuilder> builder) {
-    return builder->setString("state", state_)->setString("message", message_)->build();
-  }
-  std::string state_, message_;
-};
-
-struct SurfaceListener : ApmfBase<SurfaceListener, uv::ISurfaceViewListener, uv::IFrameEventListener> {
+struct SurfaceListener : ApmfBase<SurfaceListener, uv::ISurfaceViewListener> {
   explicit SurfaceListener(std::shared_ptr<SurfaceState> state) : state_(std::move(state)) {}
 
   void onSurfaceCreated(View<uv::ISurfaceView> surfaceView) {
@@ -896,7 +871,7 @@ struct SurfaceListener : ApmfBase<SurfaceListener, uv::ISurfaceViewListener, uv:
       auto provider = Ptr<uv::ISurfaceView>(surfaceView).TryQueryInterface<uv::IKeplerMediaSurfaceProvider>();
       auto media = provider ? provider->getMediaSurface() : Ptr<kg::IMediaSurface>();
       if (!media) {
-        state_->status("surface view has no media surface", "failed");
+        state_->status("surface view has no media surface");
         return;
       }
       std::lock_guard<std::mutex> lock(state_->mutex);
@@ -905,7 +880,7 @@ struct SurfaceListener : ApmfBase<SurfaceListener, uv::ISurfaceViewListener, uv:
         state_->thread = std::thread(renderThread, state_, media);
       }
     } catch (std::exception const& e) {
-      state_->status(std::string("onSurfaceCreated error: ") + e.what(), "failed");
+      state_->status(std::string("onSurfaceCreated error: ") + e.what());
     }
   }
 
@@ -922,29 +897,7 @@ struct SurfaceListener : ApmfBase<SurfaceListener, uv::ISurfaceViewListener, uv:
     if (thread.joinable()) thread.join();
   }
 
-  // UI thread, once per display frame: forward queued status to JS.
-  bool onFrameEvent(View<uv::IFrameEvent>) {
-    Ptr<rx::IContext> context = context_ ? *context_ : Ptr<rx::IContext>();
-    if (!context || !view_) return true;  // kept until there's a React context
-    std::deque<std::pair<std::string, std::string>> pending;
-    {
-      std::lock_guard<std::mutex> lock(state_->mutex);
-      pending.swap(state_->messages);
-    }
-    for (auto& m : pending) {
-      try {
-        context->getEventEmitter()->emitWithPayload(view_, "onStatus", Ptr<StatusPayload>::Make(m.first, m.second));
-      } catch (std::exception const& e) {
-        fileLog(std::string("emit failed: ") + e.what());
-      }
-    }
-    return true;
-  }
-
   std::shared_ptr<SurfaceState> state_;
-  // Set by updateContext, which may come after makeView.
-  std::shared_ptr<Ptr<rx::IContext>> context_;
-  Ptr<uv::IView> view_;
 };
 
 struct SurfaceViewManager
@@ -954,22 +907,16 @@ struct SurfaceViewManager
   Ptr<uv::IView> makeView() {
     auto state = std::make_shared<SurfaceState>();
     auto listener = Ptr<SurfaceListener>::Make(state);
-    auto view = viewModule_->makeMediaSurfaceView(listener);
-    listener->context_ = context_;
-    listener->view_ = view;
-    frameSubscriptions_.push_back(view->addFrameEventListener(listener));
-    return view;
+    return viewModule_->makeMediaSurfaceView(listener);
   }
 
-  void updateContext(View<rx::IContext> context) { *context_ = context; }
+  void updateContext(View<rx::IContext>) {}
 
   void updateLayout(View<uv::IView> view, View<rx::ILayout> layout) {
     view->setSize(layout->getContentFrame()->getSize());
   }
 
   Ptr<uv::IViewModule> viewModule_;
-  std::shared_ptr<Ptr<rx::IContext>> context_ = std::make_shared<Ptr<rx::IContext>>();
-  std::vector<Ptr<apmf::iface::com::amazon::apmf::ISubscription>> frameSubscriptions_;
 };
 
 struct ViewManagerFactory : ApmfBase<ViewManagerFactory, rx::IViewManagerFactory> {

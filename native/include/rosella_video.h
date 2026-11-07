@@ -74,6 +74,11 @@ typedef int (*rosella_video_latency_ms_fn)(void);
 void rosella_video_report(const rosella_video_stats *stats);
 typedef void (*rosella_video_report_fn)(const rosella_video_stats *);
 
+/* A status line (decoder starts, restarts, errors), sent to JS as a
+ * "native_status" receiver event, and so to Sentry. */
+void rosella_video_status(const char *message);
+typedef void (*rosella_video_status_fn)(const char *);
+
 #ifdef __cplusplus
 }
 #endif

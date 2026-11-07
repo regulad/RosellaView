@@ -15,4 +15,5 @@ RosellaView mirrors the screen of an iPhone, iPad or Mac and plays its audio. Fo
 
 - **TikTok:** the phone shows its "playing on the TV" screen and the TV shows that screen without the video.
 - **Copy-protected (HDCP) video,** such as most paid streaming apps (films and TV shows you rent or subscribe to). iOS leaves protected video out of mirroring.
+- **If the picture doesn't appear** on some device, **Compatibility Mode** (About & privacy, on the start screen) plays it through the TV's standard video player instead. Then the darkest and lightest shades from iPhones and iPads can merge.
 - **Other apps that "cast" or play their video "on the TV"** rather than letting the screen be mirrored. Like TikTok, they may show only their controls. RosellaView supports mirroring, not AirPlay video handoff.

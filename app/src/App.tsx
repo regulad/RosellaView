@@ -6,16 +6,18 @@
  */
 import React, {useEffect, useRef, useState} from 'react';
 import {AppState, Dimensions, Pressable, StyleSheet, Text, View} from 'react-native';
+import {AsyncStorage} from '@amazon-devices/react-native-kepler';
 import {KeplerVideoSurfaceView} from '@amazon-devices/react-native-w3cmedia';
 import {Receiver, ReceiverEvent, SegmentKind} from 'rosellaview-native';
 import {RosellaSurface} from 'rosellaview-surface';
+import {About} from './About';
 import {AvDelayOverlay} from './AvDelayOverlay';
 import {AvSync} from './AvSync';
 import {KeepAwake} from './KeepAwake';
 import {MirrorPlayer} from './MirrorPlayer';
 import {NativeVideo} from './NativeVideo';
 import {buyUnlock, cachedUnlocked, isUnlocked} from './Purchases';
-import {log, receiverEvent, receiverStats, resetStats, senderKind, warn} from './Telemetry';
+import {log, receiverEvent, receiverStats, resetStats, warn} from './Telemetry';
 import {Watermark} from './Watermark';
 
 // The receiver advertises as "RosellaView <TAG>", TAG derived from the
@@ -38,9 +40,11 @@ const SCREEN = Dimensions.get('window');
 // Stats run every 5 s; with MSE video, a keyframe is requested every other
 // tick (10 s), inside MirrorPlayer's 10 s back buffer.
 const KEYFRAME_EVERY_TICKS = 2;
-// Development: `touch /scratch/dev-mse-video` from the component shell, then
-// relaunch, to use the MSE video path instead of the native one. Read once.
-const MSE_VIDEO = Receiver.takeDevFlag('mse-video');
+// Compatibility Mode (About screen): MSE video instead of the native pipeline.
+const COMPATIBILITY_KEY = 'compatibilityMode';
+// The native surface attaches to the receiver once its decoder works; if it
+// hasn't this long into a session, or detaches during one, use MSE.
+const NATIVE_ATTACH_MS = 5000;
 
 /** Largest box of the video's aspect ratio that fits the screen, centred. */
 function fit(w: number, h: number) {
@@ -62,11 +66,17 @@ export const App = () => {
   const [buying, setBuying] = useState(false);
   const [videoSize, setVideoSize] = useState<[number, number]>([0, 0]);
   const player = useRef<MirrorPlayer | null>(null);
-  // Video goes to the native pipeline (RosellaSurface) unless it has failed
-  // in this run; then to MSE (MirrorPlayer) for the rest of it.
-  const [nativeOk, setNativeOk] = useState(!MSE_VIDEO);
-  const useNative = useRef(!MSE_VIDEO);
+  // Video goes to the native pipeline (RosellaSurface) unless Compatibility
+  // Mode is on, or it has failed in this run; then to MSE (MirrorPlayer).
+  const [compatibility, setCompatibility] = useState(false);
+  const [nativeFailed, setNativeFailed] = useState(false);
+  const nativeOk = !compatibility && !nativeFailed;
+  const useNative = useRef(true);
+  useNative.current = nativeOk;
   const nativeVideo = useRef<NativeVideo | null>(null);
+  const mirrorSince = useRef(0); // when this mirroring session started (0: none)
+  const nativeSeen = useRef(false); // the surface has attached this session
+  const [showAbout, setShowAbout] = useState(false);
   const audio = useRef<MirrorPlayer | null>(null);
   const audioCt = useRef(0);
   const volume = useRef(1);
@@ -132,7 +142,7 @@ export const App = () => {
           break;
         case 'client_request':
           setSender(String(e.name));
-          avSync.useSender(String(e.deviceid), senderKind(String(e.model))).then((ms) => {
+          avSync.useSender(String(e.deviceid)).then((ms) => {
             setAvDelay(ms);
             log(`av delay for ${String(e.model)}: ${ms}ms`);
           });
@@ -163,10 +173,13 @@ export const App = () => {
             setAudioOnly(false);
             // Each session starts from the default latency.
             nativeVideo.current = useNative.current ? new NativeVideo() : null;
+            mirrorSince.current = Date.now();
+            nativeSeen.current = false;
           }
           if (!e.running) {
             closePlayer();
             nativeVideo.current = null;
+            mirrorSince.current = 0;
           }
           break;
         case 'conn_destroy':
@@ -205,7 +218,28 @@ export const App = () => {
         }
       }
     }, 5000);
-    const sync = setInterval(() => avSync.tick(nativeVideo.current ?? player.current, audio.current), 1000);
+    // The native surface must attach in time and stay attached; else MSE for
+    // the rest of this run. The receiver sends video to the muxer once the
+    // surface detaches; restartVideo asks for the keyframe a new MSE player
+    // starts at.
+    const checkNative = () => {
+      if (!useNative.current || !mirrorSince.current) {
+        return;
+      }
+      const attached = Receiver.nativeVideo().attached;
+      nativeSeen.current = nativeSeen.current || attached;
+      if (!attached && (nativeSeen.current || Date.now() - mirrorSince.current > NATIVE_ATTACH_MS)) {
+        warn(nativeSeen.current ? 'native video detached; using MSE' : 'native video never attached; using MSE');
+        useNative.current = false;
+        nativeVideo.current = null;
+        setNativeFailed(true);
+        Receiver.restartVideo();
+      }
+    };
+    const sync = setInterval(() => {
+      checkNative();
+      avSync.tick(nativeVideo.current ?? player.current, audio.current);
+    }, 1000);
     return () => {
       clearInterval(stats);
       clearInterval(sync);
@@ -253,6 +287,17 @@ export const App = () => {
     Receiver.setWatermark(!unlocked);
   }, [unlocked]);
 
+  useEffect(() => {
+    AsyncStorage.getItem(COMPATIBILITY_KEY)
+      .then((v) => setCompatibility(v === '1'))
+      .catch(() => undefined);
+  }, []);
+  const onCompatibilityMode = (on: boolean) => {
+    setCompatibility(on);
+    log(`compatibility mode ${on ? 'on' : 'off'}`);
+    AsyncStorage.setItem(COMPATIBILITY_KEY, on ? '1' : '0').catch(() => undefined);
+  };
+
   const onRemoveWatermark = () => {
     if (buying) {
       return;
@@ -274,28 +319,11 @@ export const App = () => {
     keepAwake.current.set(sender === null);
   }, [sender]);
 
-  // The native decoder couldn't start: MSE from here on. The receiver sends
-  // video to the muxer once the surface detaches; restartVideo asks for the
-  // keyframe a new MSE player starts at.
-  const onNativeStatus = (state: string, message: string) => {
-    log(`RosellaSurface: ${message}`);
-    if (state === 'failed' && useNative.current) {
-      warn('native video failed; using MSE', {message});
-      useNative.current = false;
-      nativeVideo.current = null;
-      setNativeOk(false);
-      Receiver.restartVideo();
-    }
-  };
-
   if (mirroring) {
     return (
       <View style={styles.root}>
         {nativeOk ? (
-          <RosellaSurface
-            style={styles.fill}
-            onStatus={(e) => onNativeStatus(e.nativeEvent.state, e.nativeEvent.message)}
-          />
+          <RosellaSurface style={styles.fill} />
         ) : (
           <KeplerVideoSurfaceView
             style={[styles.video, fit(videoSize[0], videoSize[1])]}
@@ -332,6 +360,16 @@ export const App = () => {
     );
   }
 
+  if (showAbout) {
+    return (
+      <About
+        compatibilityMode={compatibility}
+        onCompatibilityMode={onCompatibilityMode}
+        onClose={() => setShowAbout(false)}
+      />
+    );
+  }
+
   return (
     <View style={styles.root}>
       {/* Referential use of Apple's mark for its own sender-side feature;
@@ -353,6 +391,9 @@ export const App = () => {
           )}
         </Pressable>
       )}
+      <Pressable onPress={() => setShowAbout(true)} style={styles.about}>
+        {({focused}) => <Text style={[styles.aboutText, focused && styles.aboutTextFocused]}>About & privacy</Text>}
+      </Pressable>
     </View>
   );
 };
@@ -366,7 +407,7 @@ const styles = StyleSheet.create({
   subtle: {color: '#888', fontSize: 28, marginTop: 24},
   button: {
     position: 'absolute',
-    bottom: 72,
+    bottom: 104,
     paddingHorizontal: 40,
     paddingVertical: 16,
     borderRadius: 40,
@@ -376,4 +417,7 @@ const styles = StyleSheet.create({
   buttonFocused: {backgroundColor: '#fff', borderColor: '#fff'},
   buttonText: {color: '#aaa', fontSize: 30},
   buttonTextFocused: {color: '#000'},
+  about: {position: 'absolute', bottom: 44, paddingHorizontal: 12, paddingVertical: 4},
+  aboutText: {color: '#777', fontSize: 20, textDecorationLine: 'underline'},
+  aboutTextFocused: {color: '#fff'},
 });

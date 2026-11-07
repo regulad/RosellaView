@@ -271,7 +271,7 @@ The laptop's `create_ap` AP now runs with `IEEE80211N=1`, started via `create_ap
   - JS sets the latency (`Receiver.setVideoLatency`); the component eases towards it at 100 ms/s (at most a 10% speed change), so corrections never freeze or skip.
   - AvSync takes the median offset of 5 readings, moves the latency within 80–1500 ms, and shifts audio only beyond those bounds. The audio player keeps its own latency cap.
 - **Recovery:** the component starts again at the next IDR, replaying the cached SPS/PPS to a new decoder, and asks for keyframes at most once a second. It restarts the decoder on a decode error, on a size change, or after 10+ frames in with nothing out for 2 s.
-- **Fallback:** if the bridge, GL or decoder can't start, the component reports `failed` and the app switches to MSE for the rest of the run. Dev flag `mse-video` forces MSE.
+- **Fallback:** the component attaches to the receiver only once GL and the decoder work. If it hasn't attached 5 s into a session, or detaches during one, the app switches to MSE for the rest of the run. (View events from the component never reach JS, D11, so the signal goes through the bridge; so do its status lines, as `native_status` receiver events.) The About screen's **Compatibility Mode** forces MSE, persistently.
 
 **Gotchas found on the way:**
 - The decoder reports its **padded** size: 816×1088 for an 810×1080 SPS. The padding is zeros, which shows as a green edge. Draw the SPS's size, sampling only the centres of visible texels.
