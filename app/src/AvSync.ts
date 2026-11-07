@@ -11,7 +11,9 @@
  * (DECISIONS.md D8).
  *
  * The viewer can add an audio delay (AvDelayOverlay) for what the timestamps
- * can't see: the different latencies of the TV's audio and video paths.
+ * don't capture. It depends mostly on the sender: an iPhone matched at
+ * +300 ms and a Mac at 0 on the same TV, so iOS evidently stamps its audio
+ * later than macOS. It's kept per sender device, with defaults by kind.
  *
  * Copyright (C) 2026 Parker Wahle
  * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -41,7 +43,10 @@ const AV_MIN_AUDIO_AHEAD_MS = 300;
 
 export const AV_DELAY_MIN_MS = -500;
 export const AV_DELAY_MAX_MS = 500;
-const DELAY_KEY = 'avDelayMs';
+const DELAY_KEY = 'avDelayMs:'; // + the sender's AirPlay device ID
+// Measured by eye on a Fire TV Stick 4K Select (2026-11-07): iPhone (iOS 27)
+// +300 ms, Mac (macOS 11) 0. iPads assumed like iPhones until tested.
+const DEFAULT_DELAY_MS: Record<string, number> = {iPhone: 300, iPad: 300, Mac: 0};
 
 export class AvSync {
   private bad = 0;
@@ -52,21 +57,32 @@ export class AvSync {
   private warmup = AV_WARMUP_CHECKS;
   private lastV = NaN;
   private lastA = NaN;
-  /** Viewer's audio delay (ms; positive plays audio later). */
+  /** Viewer's audio delay for the current sender (ms; positive plays audio later). */
   delayMs = 0;
+  private senderId = '';
   /** Latest offset from the target (ms; negative: audio late), or NaN. */
   offsetMs = NaN;
 
-  /** Loads the saved delay. */
-  async load(): Promise<void> {
+  /**
+   * A sender connected: use its saved delay, or the default for its kind
+   * ('iPhone', 'iPad', 'Mac', …). Resolves with the delay in use.
+   */
+  async useSender(deviceId: string, kind: string): Promise<number> {
+    this.senderId = deviceId;
+    let ms = DEFAULT_DELAY_MS[kind] ?? 0;
     try {
-      const v = Number(await AsyncStorage.getItem(DELAY_KEY));
-      if (Number.isFinite(v)) {
-        this.delayMs = Math.min(AV_DELAY_MAX_MS, Math.max(AV_DELAY_MIN_MS, v));
+      const saved = await AsyncStorage.getItem(DELAY_KEY + deviceId);
+      if (saved !== null && Number.isFinite(Number(saved))) {
+        ms = Number(saved);
       }
     } catch {
       // keep the default
     }
+    if (this.senderId === deviceId) {
+      // Nothing to shift: a new connection's audio starts on this target.
+      this.delayMs = Math.min(AV_DELAY_MAX_MS, Math.max(AV_DELAY_MIN_MS, ms));
+    }
+    return this.delayMs;
   }
 
   /**
@@ -93,7 +109,9 @@ export class AvSync {
     // correction doesn't fight the viewer.
     this.settle = AV_SETTLE_CHECKS;
     this.bad = 0;
-    AsyncStorage.setItem(DELAY_KEY, String(this.delayMs)).catch(() => undefined);
+    if (this.senderId) {
+      AsyncStorage.setItem(DELAY_KEY + this.senderId, String(this.delayMs)).catch(() => undefined);
+    }
   }
 
   /** Call once a second with the current players. */

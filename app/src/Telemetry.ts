@@ -30,7 +30,7 @@ export function warn(msg: string, extra?: Record<string, unknown>): void {
 }
 
 /** "iPhone18,1" → "iPhone", "MacBook8,1" → "Mac", "iPad13,4" → "iPad". */
-function senderKind(model: string): string {
+export function senderKind(model: string): string {
   if (model.startsWith('iPhone')) {
     return 'iPhone';
   }

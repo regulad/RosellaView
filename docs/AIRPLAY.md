@@ -25,6 +25,7 @@ These are findings about AirPlay senders and libairplay (UxPlay's `lib/`), seen 
   - ALAC (`ct=2`) for audio-only (music)
   - It ignores the receiver's advertised `audioFormats` and sends these regardless.
   - The audio stream stops and restarts with a fresh `audio_format` call when apps pause media.
+  - **Its audio timestamps run about 300 ms later than its video's,** relative to macOS (2026-11-07). With A/V matched by sender time, lips matched at +300 ms of audio delay for the iPhone and at 0 for the Mac, on the same TV. RosellaView keeps the delay per sender device, defaulting by kind.
   - **iOS suppresses quiet or short sounds while no media audio is playing.** Transients such as a metronome "click" used to judge lip sync sometimes didn't come through cleanly. Playing any audio in the background fixed it. So test A/V sync with continuous media audio (a video with speech), not with isolated clicks.
 
 - **Apps whose video iOS leaves out of the mirror** (2026-11-07). Mirroring carries on, but the app's video area isn't in it.

@@ -13,7 +13,7 @@ import {AvSync} from './AvSync';
 import {KeepAwake} from './KeepAwake';
 import {MirrorPlayer} from './MirrorPlayer';
 import {buyUnlock, cachedUnlocked, isUnlocked} from './Purchases';
-import {log, receiverEvent, receiverStats, resetStats, warn} from './Telemetry';
+import {log, receiverEvent, receiverStats, resetStats, senderKind, warn} from './Telemetry';
 import {Watermark} from './Watermark';
 
 // The receiver advertises as "RosellaView <TAG>", TAG derived from the
@@ -120,6 +120,10 @@ export const App = () => {
           break;
         case 'client_request':
           setSender(String(e.name));
+          avSync.useSender(String(e.deviceid), senderKind(String(e.model))).then((ms) => {
+            setAvDelay(ms);
+            log(`av delay for ${String(e.model)}: ${ms}ms`);
+          });
           break;
         case 'video_format': {
           const [w, h] = e.source as [number, number];
@@ -178,7 +182,6 @@ export const App = () => {
         }
       }
     }, 5000);
-    avSync.load().then(() => setAvDelay(avSync.delayMs));
     const sync = setInterval(() => avSync.tick(player.current, audio.current), 1000);
     return () => {
       clearInterval(stats);

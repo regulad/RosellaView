@@ -178,7 +178,10 @@ The laptop's `create_ap` AP now runs with `IEEE80211N=1`, started via `create_ap
   - a 5 s warm-up after a player starts
   - offsets over 3 s ignored
   - 4 s to settle after each correction
-- **The TV's audio and video output latencies differ by a constant** that timestamps can't see. Hence the viewer delay; its default may change once it's measured on more TVs.
+- **A constant offset remains that the timestamps don't capture, and it depends on the sender.** On the same TV, an iPhone (iOS 27) matched at +300 ms and a Mac (macOS 11) at 0. So iOS evidently stamps its audio about 300 ms later than its video, and macOS doesn't.
+  - Hence the viewer delay is **kept per sender device** (by AirPlay device ID).
+  - A new device starts from a default for its kind: iPhone +300 ms, Mac 0. iPads are assumed like iPhones until tested.
+  - Any TV-specific output latency is folded into the same number.
 
 **Implications:**
 - In audio-only mode (no video player) the latency cap in `MirrorPlayer` keeps audio live instead, by dropping samples down to about 0.5 s.
