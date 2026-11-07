@@ -69,11 +69,30 @@ export class AvSync {
     }
   }
 
-  /** Sets and saves the viewer's delay; the next check acts on it. */
+  /**
+   * Sets and saves the viewer's delay, and applies the change to the stream
+   * at once: the automatic check only acts beyond AV_TOLERANCE_MS, so steps
+   * smaller than that would otherwise never be heard.
+   */
   setDelay(ms: number): void {
-    this.delayMs = Math.min(AV_DELAY_MAX_MS, Math.max(AV_DELAY_MIN_MS, Math.round(ms)));
-    this.settle = 0;
-    this.bad = AV_BAD_CHECKS - 1;
+    const next = Math.min(AV_DELAY_MAX_MS, Math.max(AV_DELAY_MIN_MS, Math.round(ms)));
+    const delta = next - this.delayMs;
+    this.delayMs = next;
+    if (delta !== 0 && this.audio) {
+      // More delay: insert silence (negative shift); less: drop audio.
+      let shift = -delta;
+      if (shift > 0) {
+        const ahead = this.audio.metrics()?.aheadMs ?? 0;
+        shift = Math.min(shift, Math.max(0, ahead - AV_MIN_AUDIO_AHEAD_MS));
+      }
+      if (shift !== 0) {
+        Receiver.shiftAudio(shift);
+      }
+    }
+    // Let the change play through before checking again, so the automatic
+    // correction doesn't fight the viewer.
+    this.settle = AV_SETTLE_CHECKS;
+    this.bad = 0;
     AsyncStorage.setItem(DELAY_KEY, String(this.delayMs)).catch(() => undefined);
   }
 

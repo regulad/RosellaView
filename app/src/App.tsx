@@ -12,7 +12,7 @@ import {AvDelayOverlay} from './AvDelayOverlay';
 import {AvSync} from './AvSync';
 import {KeepAwake} from './KeepAwake';
 import {MirrorPlayer} from './MirrorPlayer';
-import {buyUnlock, isUnlocked} from './Purchases';
+import {buyUnlock, cachedUnlocked, isUnlocked} from './Purchases';
 import {log, receiverEvent, receiverStats, resetStats, warn} from './Telemetry';
 import {Watermark} from './Watermark';
 
@@ -193,14 +193,25 @@ export const App = () => {
     };
   }, []);
 
-  // Entitlement: checked at launch and on every return to the foreground, so
-  // a purchase or refund made elsewhere is picked up without a restart.
+  // Entitlement: the cached answer at once, then the Appstore's at launch and
+  // on every return to the foreground, so a purchase or refund made elsewhere
+  // is picked up without a restart. If the Appstore can't answer, the cached
+  // answer stands.
   useEffect(() => {
+    let answered = false; // a live answer beats the cached one
+    cachedUnlocked().then((u) => {
+      if (u && !answered) {
+        setUnlocked(true);
+      }
+    });
     const refresh = () =>
       isUnlocked(log)
         .then((u) => {
-          log(`unlocked=${u}`);
-          setUnlocked(u);
+          log(`unlocked=${u === null ? 'unknown (kept cached)' : u}`);
+          if (u !== null) {
+            answered = true;
+            setUnlocked(u);
+          }
         })
         .catch((e) => log(`entitlement check failed: ${String(e)}`));
     refresh();

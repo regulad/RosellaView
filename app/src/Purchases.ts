@@ -5,6 +5,7 @@
  * Copyright (C) 2026 Parker Wahle
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+import {AsyncStorage} from '@amazon-devices/react-native-kepler';
 import {
   FulfillmentResult,
   PurchaseResponseCode,
@@ -17,8 +18,29 @@ export const UNLOCK_SKU = 'rosellaview.remove_watermark';
 
 type Log = (msg: string) => void;
 
-/** True if the current Amazon account owns the (uncancelled) unlock. */
-export async function isUnlocked(log: Log): Promise<boolean> {
+// The last answer the Appstore gave, so a launch without the Appstore (offline,
+// service hiccup) keeps a paid unlock instead of showing the watermark.
+const CACHE_KEY = 'unlocked';
+
+/** The cached entitlement (false if never confirmed). */
+export async function cachedUnlocked(): Promise<boolean> {
+  try {
+    return (await AsyncStorage.getItem(CACHE_KEY)) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function cache(unlocked: boolean): void {
+  AsyncStorage.setItem(CACHE_KEY, String(unlocked)).catch(() => undefined);
+}
+
+/**
+ * Asks the Appstore whether the current Amazon account owns the
+ * (uncancelled) unlock. Resolves null if it couldn't answer; then keep using
+ * cachedUnlocked().
+ */
+export async function isUnlocked(log: Log): Promise<boolean | null> {
   let reset = true;
   let unlocked = false;
   // Receipts arrive in pages; the first request resets to the full history.
@@ -26,7 +48,7 @@ export async function isUnlocked(log: Log): Promise<boolean> {
     const res = await PurchasingService.getPurchaseUpdates({reset});
     if (res.responseCode !== PurchaseUpdatesResponseCode.SUCCESSFUL) {
       log(`getPurchaseUpdates failed: code ${res.responseCode}`);
-      return false;
+      return null;
     }
     for (const r of res.receiptList ?? []) {
       if (r.sku === UNLOCK_SKU) {
@@ -38,6 +60,7 @@ export async function isUnlocked(log: Log): Promise<boolean> {
     }
     reset = false;
   }
+  cache(unlocked);
   return unlocked;
 }
 
@@ -54,8 +77,10 @@ export async function buyUnlock(log: Log): Promise<boolean> {
           fulfillmentResult: FulfillmentResult.FULFILLED,
         });
       }
+      cache(true);
       return true;
     case PurchaseResponseCode.ALREADY_PURCHASED:
+      cache(true);
       return true;
     default:
       return false;

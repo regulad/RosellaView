@@ -88,8 +88,6 @@ export const AvDelayOverlay = ({active, delayMs, onChange}: Props) => {
 const SCREEN = Dimensions.get('window');
 const KNOB = 28;
 const LABEL_H = 56;
-// No backing panel, so text and bar get a dark shadow to stay legible on video.
-const SHADOW = {textShadowColor: 'rgba(0,0,0,0.85)', textShadowOffset: {width: 0, height: 2}, textShadowRadius: 6};
 
 const styles = StyleSheet.create({
   // The bar sits on the line one sixth of the screen up from the bottom.
@@ -100,7 +98,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 20,
   },
-  label: {height: LABEL_H, color: '#fff', fontSize: 30, fontWeight: 'bold', ...SHADOW},
+  label: {height: LABEL_H, color: '#fff', fontSize: 30, fontWeight: 'bold'},
   value: {color: '#a0a0a0', fontWeight: 'bold'},
   bar: {width: BAR_W, height: 8, borderRadius: 4, backgroundColor: 'rgba(160,160,160,0.7)', justifyContent: 'center'},
   center: {position: 'absolute', left: BAR_W / 2 - 1, width: 2, height: 22, top: -7, backgroundColor: '#fff'},
