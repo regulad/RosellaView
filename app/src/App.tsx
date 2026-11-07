@@ -42,9 +42,6 @@ const SCREEN = Dimensions.get('window');
 const KEYFRAME_EVERY_TICKS = 2;
 // Compatibility Mode (About screen): MSE video instead of the native pipeline.
 const COMPATIBILITY_KEY = 'compatibilityMode';
-// The native surface attaches to the receiver once its decoder works; if it
-// hasn't this long into a session, or detaches during one, use MSE.
-const NATIVE_ATTACH_MS = 5000;
 
 /** Largest box of the video's aspect ratio that fits the screen, centred. */
 function fit(w: number, h: number) {
@@ -66,16 +63,12 @@ export const App = () => {
   const [buying, setBuying] = useState(false);
   const [videoSize, setVideoSize] = useState<[number, number]>([0, 0]);
   const player = useRef<MirrorPlayer | null>(null);
-  // Video goes to the native pipeline (RosellaSurface) unless Compatibility
-  // Mode is on, or it has failed in this run; then to MSE (MirrorPlayer).
+  // Video goes to the native pipeline (RosellaSurface) unless the viewer has
+  // turned on Compatibility Mode (About screen); then to MSE (MirrorPlayer).
   const [compatibility, setCompatibility] = useState(false);
-  const [nativeFailed, setNativeFailed] = useState(false);
-  const nativeOk = !compatibility && !nativeFailed;
   const useNative = useRef(true);
-  useNative.current = nativeOk;
+  useNative.current = !compatibility;
   const nativeVideo = useRef<NativeVideo | null>(null);
-  const mirrorSince = useRef(0); // when this mirroring session started (0: none)
-  const nativeSeen = useRef(false); // the surface has attached this session
   const [showAbout, setShowAbout] = useState(false);
   const audio = useRef<MirrorPlayer | null>(null);
   const audioCt = useRef(0);
@@ -173,13 +166,10 @@ export const App = () => {
             setAudioOnly(false);
             // Each session starts from the default latency.
             nativeVideo.current = useNative.current ? new NativeVideo() : null;
-            mirrorSince.current = Date.now();
-            nativeSeen.current = false;
           }
           if (!e.running) {
             closePlayer();
             nativeVideo.current = null;
-            mirrorSince.current = 0;
           }
           break;
         case 'conn_destroy':
@@ -218,28 +208,7 @@ export const App = () => {
         }
       }
     }, 5000);
-    // The native surface must attach in time and stay attached; else MSE for
-    // the rest of this run. The receiver sends video to the muxer once the
-    // surface detaches; restartVideo asks for the keyframe a new MSE player
-    // starts at.
-    const checkNative = () => {
-      if (!useNative.current || !mirrorSince.current) {
-        return;
-      }
-      const attached = Receiver.nativeVideo().attached;
-      nativeSeen.current = nativeSeen.current || attached;
-      if (!attached && (nativeSeen.current || Date.now() - mirrorSince.current > NATIVE_ATTACH_MS)) {
-        warn(nativeSeen.current ? 'native video detached; using MSE' : 'native video never attached; using MSE');
-        useNative.current = false;
-        nativeVideo.current = null;
-        setNativeFailed(true);
-        Receiver.restartVideo();
-      }
-    };
-    const sync = setInterval(() => {
-      checkNative();
-      avSync.tick(nativeVideo.current ?? player.current, audio.current);
-    }, 1000);
+    const sync = setInterval(() => avSync.tick(nativeVideo.current ?? player.current, audio.current), 1000);
     return () => {
       clearInterval(stats);
       clearInterval(sync);
@@ -322,7 +291,7 @@ export const App = () => {
   if (mirroring) {
     return (
       <View style={styles.root}>
-        {nativeOk ? (
+        {!compatibility ? (
           <RosellaSurface style={styles.fill} />
         ) : (
           <KeplerVideoSurfaceView

@@ -1,18 +1,27 @@
 /*
  * About & privacy: the licence notices AGPL §5(d) asks an interactive program
- * to show, the third-party notices, the privacy disclosure, and the
- * Compatibility Mode switch (MSE video instead of the native pipeline,
- * DECISIONS.md D12). Laid out to fit one screen, so it needs no scrolling.
+ * to show, the third-party notices, the privacy disclosure, and at the end
+ * the Compatibility Mode checkbox (MSE video instead of the native pipeline,
+ * DECISIONS.md D12).
+ *
+ * One column, scrolled with up/down on the remote: text isn't focusable, so
+ * the focus engine wouldn't scroll it. The checkbox is the only focusable
+ * element; it answers select only once it's scrolled into view.
  *
  * Copyright (C) 2026 Parker Wahle
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-import React, {useEffect} from 'react';
-import {BackHandler, Pressable, StyleSheet, Text, View} from 'react-native';
+import {useTVEventHandler} from '@amazon-devices/react-native-kepler';
+import type {HWEvent} from '@amazon-devices/react-native-kepler';
+import React, {useEffect, useRef, useState} from 'react';
+import {BackHandler, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {BUILD} from './buildInfo';
 
 export const SOURCE_URL = 'https://github.com/regulad/RosellaView';
+export const PRIVACY_URL = 'https://regulad.github.io/RosellaView/';
 const LICENSE_URL = 'https://www.gnu.org/licenses/agpl-3.0.html';
+const SCROLL_STEP = 240;
+const KEY_UP = 1;
 
 type Props = {
   compatibilityMode: boolean;
@@ -33,6 +42,14 @@ const NOTICES: [string, string, string][] = [
 ];
 
 export const About = ({compatibilityMode, onCompatibilityMode, onClose}: Props) => {
+  const scroll = useRef<ScrollView | null>(null);
+  const offset = useRef(0);
+  const [size, setSize] = useState({view: 0, content: 0});
+  const maxOffset = Math.max(0, size.content - size.view);
+  const [atEnd, setAtEnd] = useState(false);
+  const latest = useRef({maxOffset});
+  latest.current = {maxOffset};
+
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       onClose();
@@ -41,26 +58,38 @@ export const About = ({compatibilityMode, onCompatibilityMode, onClose}: Props) 
     return () => sub.remove();
   }, [onClose]);
 
+  useEffect(() => {
+    setAtEnd(size.content > 0 && offset.current >= maxOffset - 1);
+  }, [size, maxOffset]);
+
+  useTVEventHandler((e: HWEvent) => {
+    if (e.eventKeyAction === KEY_UP || (e.eventType !== 'up' && e.eventType !== 'down')) {
+      return;
+    }
+    const max = latest.current.maxOffset;
+    const y = Math.min(max, Math.max(0, offset.current + (e.eventType === 'down' ? SCROLL_STEP : -SCROLL_STEP)));
+    offset.current = y;
+    setAtEnd(y >= max - 1);
+    scroll.current?.scrollTo({y, animated: true});
+  });
+
   return (
     <View style={styles.root}>
-      <View style={styles.column}>
+      <ScrollView
+        ref={scroll}
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        scrollEnabled={false}
+        onLayout={(e) => setSize((s) => ({...s, view: e.nativeEvent.layout.height}))}
+        onContentSizeChange={(_w, h) => setSize((s) => ({...s, content: h}))}
+        // In case the focus engine scrolls to the checkbox itself.
+        scrollEventThrottle={100}
+        onScroll={(e) => {
+          offset.current = e.nativeEvent.contentOffset.y;
+          setAtEnd(offset.current >= latest.current.maxOffset - 1);
+        }}>
         <Text style={styles.title}>RosellaView</Text>
         <Text style={styles.body}>Version {BUILD.release.replace(/^rosellaview@/, '')}</Text>
-
-        <Pressable
-          hasTVPreferredFocus
-          onPress={() => onCompatibilityMode(!compatibilityMode)}
-          style={({focused}) => [styles.toggle, focused && styles.toggleFocused]}>
-          {({focused}) => (
-            <Text style={[styles.toggleText, focused && styles.toggleTextFocused]}>
-              Compatibility Mode: {compatibilityMode ? 'On' : 'Off'}
-            </Text>
-          )}
-        </Pressable>
-        <Text style={styles.small}>
-          Plays mirrored video through the TV's standard video player. Try it if the picture doesn't appear. With it
-          on, the darkest and lightest shades from iPhones and iPads can merge.
-        </Text>
 
         <Text style={styles.heading}>Privacy</Text>
         <Text style={styles.small}>
@@ -71,12 +100,9 @@ export const About = ({compatibilityMode, onCompatibilityMode, onClose}: Props) 
           To find and fix problems, RosellaView sends crash reports and diagnostics to Sentry (sentry.io): errors,
           playback and performance statistics, this TV's software version, and the name, model, operating system
           version, AirPlay ID and network address (MAC) of the device you mirror from. Purchases are handled by the
-          Amazon Appstore.
+          Amazon Appstore. Privacy policy: {PRIVACY_URL}
         </Text>
-        <Text style={styles.hint}>Press Back to return.</Text>
-      </View>
 
-      <View style={styles.column}>
         <Text style={styles.heading}>Licence</Text>
         <Text style={styles.small}>
           Copyright © 2026 Parker Wahle. RosellaView is free software: you can redistribute it and/or modify it under
@@ -91,38 +117,62 @@ export const About = ({compatibilityMode, onCompatibilityMode, onClose}: Props) 
             {name} ({licence}), © {holder}
           </Text>
         ))}
-        <Text style={styles.small}>Licence texts and source code for these are available with RosellaView's source.</Text>
+        <Text style={[styles.small, styles.after]}>
+          Licence texts and source code for these are available with RosellaView's source.
+        </Text>
 
         <Text style={styles.heading}>Trademarks</Text>
         <Text style={styles.small}>
           AirPlay is a trademark of Apple Inc., registered in the U.S. and other countries. RosellaView is not
           affiliated with or endorsed by Apple Inc.
         </Text>
-      </View>
+
+        <Text style={styles.heading}>Settings</Text>
+        <Pressable
+          hasTVPreferredFocus
+          onPress={() => {
+            if (atEnd) {
+              onCompatibilityMode(!compatibilityMode);
+            }
+          }}
+          style={styles.checkRow}>
+          {({focused}) => {
+            const lit = focused && atEnd;
+            return (
+              <>
+                <Text style={[styles.checkLabel, lit && styles.lit]}>Compatibility Mode</Text>
+                <View style={[styles.box, lit && styles.boxLit]}>
+                  {compatibilityMode ? <Text style={[styles.check, lit && styles.lit]}>✓</Text> : null}
+                </View>
+              </>
+            );
+          }}
+        </Pressable>
+        <Text style={styles.small}>
+          Plays mirrored video through the TV's standard video player. Try it if the picture doesn't appear. With it
+          on, the darkest and lightest shades from iPhones and iPads can merge.
+        </Text>
+      </ScrollView>
+      <Text style={styles.hint}>{atEnd ? 'Press Back to return.' : '▼ Scroll down · Back to return'}</Text>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  root: {flex: 1, flexDirection: 'row', backgroundColor: '#000', paddingHorizontal: 96, paddingVertical: 64},
-  column: {flex: 1, marginHorizontal: 32},
+  root: {flex: 1, backgroundColor: '#000', alignItems: 'center'},
+  scroll: {flex: 1, width: 1100},
+  content: {paddingTop: 72, paddingBottom: 48},
   title: {color: '#fff', fontSize: 44, fontWeight: 'bold'},
-  heading: {color: '#fff', fontSize: 26, fontWeight: 'bold', marginTop: 28, marginBottom: 8},
-  body: {color: '#aaa', fontSize: 22, marginTop: 4},
-  small: {color: '#aaa', fontSize: 19, lineHeight: 27, marginBottom: 8},
-  notice: {color: '#aaa', fontSize: 19, lineHeight: 26},
-  hint: {color: '#666', fontSize: 19, marginTop: 24},
-  toggle: {
-    alignSelf: 'flex-start',
-    marginTop: 28,
-    marginBottom: 10,
-    paddingHorizontal: 28,
-    paddingVertical: 10,
-    borderRadius: 30,
-    borderWidth: 3,
-    borderColor: '#666',
-  },
-  toggleFocused: {backgroundColor: '#fff', borderColor: '#fff'},
-  toggleText: {color: '#ddd', fontSize: 24},
-  toggleTextFocused: {color: '#000'},
+  heading: {color: '#fff', fontSize: 28, fontWeight: 'bold', marginTop: 36, marginBottom: 10},
+  body: {color: '#aaa', fontSize: 24, marginTop: 4},
+  small: {color: '#aaa', fontSize: 22, lineHeight: 32, marginBottom: 10},
+  notice: {color: '#aaa', fontSize: 22, lineHeight: 32},
+  after: {marginTop: 10},
+  hint: {color: '#666', fontSize: 20, paddingVertical: 20},
+  checkRow: {flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', paddingVertical: 8, marginBottom: 8},
+  checkLabel: {color: '#ddd', fontSize: 26, marginRight: 18},
+  box: {width: 34, height: 34, borderWidth: 3, borderColor: '#888', borderRadius: 4, alignItems: 'center', justifyContent: 'center'},
+  boxLit: {borderColor: '#fff', backgroundColor: '#333'},
+  check: {color: '#ddd', fontSize: 24, fontWeight: 'bold', lineHeight: 28},
+  lit: {color: '#fff'},
 });

@@ -256,7 +256,7 @@ The laptop's `create_ap` AP now runs with `IEEE80211N=1`, started via `create_ap
 
 ## D12. Native video: hardware decode through media_transform, rendered on our own surface (2026-11-07)
 
-**Decision:** Mirrored video no longer goes through MSE. The receiver hands each H.264 access unit to the native surface component (D11), which decodes it with the OS's hardware decoder and renders it with our own shader. MSE stays as an automatic fallback.
+**Decision:** Mirrored video no longer goes through MSE. The receiver hands each H.264 access unit to the native surface component (D11), which decodes it with the OS's hardware decoder and renders it with our own shader. MSE stays as a manual Compatibility Mode.
 
 **Why:**
 - **Full range** is shown correctly (D9). The decoder passes samples through untouched: a full-range chart decoded bit-exactly, matching FFmpeg.
@@ -271,7 +271,7 @@ The laptop's `create_ap` AP now runs with `IEEE80211N=1`, started via `create_ap
   - JS sets the latency (`Receiver.setVideoLatency`); the component eases towards it at 100 ms/s (at most a 10% speed change), so corrections never freeze or skip.
   - AvSync takes the median offset of 5 readings, moves the latency within 80–1500 ms, and shifts audio only beyond those bounds. The audio player keeps its own latency cap.
 - **Recovery:** the component starts again at the next IDR, replaying the cached SPS/PPS to a new decoder, and asks for keyframes at most once a second. It restarts the decoder on a decode error, on a size change, or after 10+ frames in with nothing out for 2 s.
-- **Fallback:** the component attaches to the receiver only once GL and the decoder work. If it hasn't attached 5 s into a session, or detaches during one, the app switches to MSE for the rest of the run. (View events from the component never reach JS, D11, so the signal goes through the bridge; so do its status lines, as `native_status` receiver events.) The About screen's **Compatibility Mode** forces MSE, persistently.
+- **MSE stays, as Compatibility Mode only:** a checkbox on the About screen, persisted, switched on by the viewer. There's no automatic fallback (owner's call): the native path is the product. The component's status lines reach JS through the bridge as `native_status` receiver events (view events from it never arrive, D11).
 
 **Gotchas found on the way:**
 - The decoder reports its **padded** size: 816×1088 for an 810×1080 SPS. The padding is zeros, which shows as a green edge. Draw the SPS's size, sampling only the centres of visible texels.
@@ -279,4 +279,4 @@ The laptop's `create_ap` AP now runs with `IEEE80211N=1`, started via `create_ap
 - **A keyframe request before the stream's first frame ends macOS mirroring:** the Mac answers with an empty codec packet, which libairplay reads as non-H.264. `receiver_request_keyframe` refuses until the first frame.
 - With native video, the iPhone's lip sync is right at 0 ms delay. It needed +300 ms on MSE.
 
-**Risk:** `media_transform` is outside the OS compatibility contract. An OS update could break it, and the fallback then takes over. FFmpeg software decode is the plan B if the fallback's range clipping isn't acceptable.
+**Risk:** `media_transform` is outside the OS compatibility contract. An OS update could break it; viewers can then turn on Compatibility Mode, and we'd ship a fix (plan B: FFmpeg software decode, which keeps full range).
