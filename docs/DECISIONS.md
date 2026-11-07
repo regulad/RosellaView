@@ -128,11 +128,16 @@ The laptop's `create_ap` AP now runs with `IEEE80211N=1`, started via `create_ap
 - `fmp4.c` still flags a sync sample once a second, in `tfhd`. That's harmless, and right for players that honour it.
 - The trim only works because D7 makes the sender send real IDRs.
 
-**A/B result (2026-11-07, Mac, Big Buck Bunny, provisional):**
+**A/B result (2026-11-07, Mac, Big Buck Bunny):**
 - **Trim off (B):** the player evicts by itself at its threshold. Played video went to about 96 s, then dropped to about 4 s; no freeze, no errors. So with D7's keyframes the trim isn't needed for correctness.
 - **The buffer is allocated in our process as data arrives,** not reserved up front. During B's fill, RSS went 124 → 265 MB, then grew about 3–4 MB/min after eviction.
 - **Trim on (A):** RSS still climbed steadily, 122 → 231 MB over 5 minutes, about 20 MB/min, with only about 10 s buffered. That points to a leak or allocator churn outside the `SourceBuffer` (segment ArrayBuffers? freed memory not returned?). An overnight run on A tells us which.
-- **Decision for now:** keep the trim, which matches Amazon's advice (VEGA.md). Investigate A's memory growth.
+- **B over a full loop (about 9 minutes):**
+  - played video sawtoothed from about 4 s up to 134 s
+  - RSS climbed to 310 MB without levelling off, with swap at 393 MB and 26–35 MB of RAM free
+  - our CPU share crept from 11% to 15%
+  - the owner saw regular micro-stutter. The sender's frame rate held at 24 fps, so the stutter was on the playback side: likely memory pressure, plus the player's big burst evictions.
+- **Decision: keep the trim** (matches Amazon's advice, VEGA.md). Investigate A's memory growth over an overnight run.
 
 **Original question (low priority):** is the trim still needed now that IDRs arrive every 10 s? With a single IDR the player never evicted. With regular IDRs, nobody has tested it with the trim off: every run with forced keyframes had it on.
 - **The test:** a Mac session with the trim disabled and keyframe requests on. At about 8 Mbit/s, `video.buffer_behind` reaches the 100 MB threshold in about 2 minutes, then either drops (the player evicts) or the picture freezes.
