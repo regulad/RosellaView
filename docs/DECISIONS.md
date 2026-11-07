@@ -120,7 +120,8 @@ The laptop's `create_ap` AP now runs with `IEEE80211N=1`, started via `create_ap
 - MSE keeps already-played compressed video for seeking, and discards it only in whole runs from one sync sample to the next. Vega's media library hard-codes a 100 MB eviction threshold (`DEFAULT_EVICTION_THRESHOLD`, OS-provided JS).
 - With no evictable runs, the `SourceBuffer` filled after about 2 minutes of a Mac's 8 Mbit/s: `QuotaExceededError`, then a frozen picture. The iPhone stall at about 6 minutes was the same thing.
 - **The flag was in the wrong box.** Vega's player ignores `trun`'s per-sample fields, `first-sample-flags` as well as durations. Flagging in `trun` alone meant the player saw no sync sample at all, the real IDR included.
-- **Trimming ourselves didn't work.** A `remove()` behind the playhead cascaded to the next sync sample it knew of. There was none, so it removed everything, including the frames about to play.
+- **Vega's player doesn't evict played video at all,** even with sync samples it can see: `video.buffer_behind` grew in a straight line to the quota. So `MirrorPlayer` removes played video more than 10 s behind the playhead every 5 s, as live MSE players do (hls.js's `backBufferLength`).
+- That trim only works with the flags in `tfhd`. Before, a `remove()` behind the playhead cascaded to the next sync sample the player knew of. There was none, so it removed everything, including the frames about to play.
 - The decoder never needs old compressed frames. A P-frame refers to decoded pictures in the decoder's own reference buffer. Flagging a P-frame as a sync sample only tells MSE where it may cut.
 
 **Implications:**

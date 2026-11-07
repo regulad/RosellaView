@@ -22,6 +22,14 @@ type Log = (msg: string) => void;
 // although at least STALL_MIN_FRAMES new frames arrived in the meantime (a
 // still screen sends no frames, so it never looks stalled).
 const STALL_MS = 2500;
+
+// Played video further back than BACK_BUFFER_S is removed every TRIM_EVERY_MS,
+// as live MSE players do (hls.js's backBufferLength): Vega's player doesn't
+// evict played video itself, so the SourceBuffer would fill (100 MB, about
+// 2 min of a Mac's 8 Mbit/s) and playback freeze. A remove stops at the next
+// sync sample, which fmp4.c flags at least once a second (DECISIONS.md D6).
+const BACK_BUFFER_S = 10;
+const TRIM_EVERY_MS = 5000;
 const STALL_MIN_FRAMES = 30;
 
 export type StreamKind = {kind: 'video'} | {kind: 'audio'; mime: string};
@@ -41,6 +49,8 @@ export class MirrorPlayer {
   private lastTime = -1;
   private lastMove = 0;
   private appendedAtMove = 0;
+  private lastTrim = 0;
+  private trims = 0;
 
   constructor(
     private readonly log: Log,
@@ -134,18 +144,57 @@ export class MirrorPlayer {
     }
   }
 
+  /** Starts removing played video if it's time (or `force`); true if a remove is under way. */
+  private trim(force: boolean): boolean {
+    const sb = this.buffer;
+    const vp = this.player;
+    const now = Date.now();
+    if (!sb || !vp || !this.isVideo || (!force && now - this.lastTrim < TRIM_EVERY_MS)) {
+      return false;
+    }
+    this.lastTrim = now;
+    const b = vp.buffered;
+    const end = vp.currentTime - BACK_BUFFER_S;
+    if (!b || !b.length || b.start(0) >= end) {
+      return false;
+    }
+    try {
+      sb.remove(b.start(0), end);
+      this.trims++;
+      return true;
+    } catch (e) {
+      warn(`${this.stream.kind} remove threw`, {error: String(e)});
+      return false;
+    }
+  }
+
   private pump(): void {
     const sb = this.buffer;
-    if (!sb || this.busy || this.queue.length === 0) {
+    if (!sb || this.busy) {
       return;
     }
     this.busy = true;
+    if (this.trim(false)) {
+      return; // updateend pumps again
+    }
+    if (this.queue.length === 0) {
+      this.busy = false;
+      return;
+    }
+    const next = this.queue.shift()!;
     try {
-      sb.appendBuffer(this.queue.shift()!);
+      sb.appendBuffer(next);
       this.appended++;
     } catch (e) {
+      if (String(e).includes('QuotaExceeded')) {
+        // Full anyway: keep the segment, free space, retry on updateend.
+        this.queue.unshift(next);
+        if (this.trim(true)) {
+          return;
+        }
+      }
       this.busy = false;
-      warn(`${this.stream.kind} appendBuffer threw`, {error: String(e)});
+      warn(`${this.stream.kind} appendBuffer threw`, {error: String(e), trims: this.trims});
     }
   }
 
@@ -161,10 +210,9 @@ export class MirrorPlayer {
       vp.play();
       this.log(`${this.stream.kind} play()`);
     }
-    // No manual remove(): the player evicts old samples itself once it sees
-    // sync samples (native/src/fmp4.c flags one a second), and removing near
-    // the read head makes it declare a discontinuity and drop everything until
-    // the next sync sample.
+    // Played video is removed in trim(), well behind the playhead: removing
+    // near the read head makes the player declare a discontinuity and drop
+    // everything until the next sync sample.
     this.pump();
   }
 

@@ -135,8 +135,7 @@ export function receiverStats(s: Record<string, unknown>, video: PlayerMetrics |
   if (video) {
     metrics.gauge('video.buffer_ahead', video.aheadMs, {unit: 'millisecond', attributes});
     metrics.gauge('video.queue', video.queue, {attributes});
-    // Already-played video the player still holds; it should level off once
-    // the player evicts (DECISIONS.md D6).
+    // Already-played video still buffered; MirrorPlayer trims it to ~10-15 s.
     metrics.gauge('video.buffer_behind', video.behindMs, {unit: 'millisecond', attributes});
   }
   if (audio) {
