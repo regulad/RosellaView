@@ -17,7 +17,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <dirent.h>
+#include <sys/resource.h>
 #include <sys/stat.h>
+#include <sys/sysinfo.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -697,49 +699,56 @@ static void proc_line(const char *path, char *buf, size_t len) {
     fclose(f);
 }
 
-/* `"key":value,...` system and process counters (CPU ticks, pressure, swap,
- * frequency, threads, fds); the JS side turns tick counts into rates. */
+/* Appends `"key":value` (or `"key":null` when value < 0) to out. */
+static void put_num(char **out, size_t *left, const char *key, double value) {
+    int n = value < 0 ? snprintf(*out, *left, ",\"%s\":null", key) : snprintf(*out, *left, ",\"%s\":%.2f", key, value);
+    if (n > 0 && (size_t)n < *left) {
+        *out += n;
+        *left -= (size_t)n;
+    }
+}
+
+/* System and process counters. The app's /proc shows only per-process
+ * entries (no /proc/meminfo, /proc/stat, /proc/loadavg, /proc/pressure), so
+ * device-wide figures come from sysinfo() and process CPU from getrusage().
+ * Anything unavailable is null, never 0. */
 static void system_stats(char *out, size_t len) {
-    char line[512];
-    unsigned long long user = 0, nice = 0, sys = 0, idle = 0, iowait = 0, irq = 0, softirq = 0, steal = 0;
-    unsigned long utime = 0, stime = 0;
-    double load1 = 0, mem_some = 0, cpu_some = 0;
-    long threads = proc_kb("/proc/self/status", "Threads"), fds = 0;
-    long freq = -1, freq_max = -1;
-    char *p;
+    char line[128], *p = out;
+    size_t left = len;
+    struct sysinfo si;
+    struct rusage ru;
+    double unit;
+    long freq = -1, freq_max = -1, fds = -1;
     DIR *d;
 
-    proc_line("/proc/stat", line, sizeof line);
-    sscanf(line, "cpu %llu %llu %llu %llu %llu %llu %llu %llu", &user, &nice, &sys, &idle, &iowait, &irq, &softirq,
-           &steal);
-    proc_line("/proc/self/stat", line, sizeof line);
-    if ((p = strrchr(line, ')')) != NULL) {
-        /* fields after ") ": state(3) ... utime(14) stime(15) */
-        sscanf(p + 2, "%*c %*d %*d %*d %*d %*d %*u %*u %*u %*u %*u %lu %lu", &utime, &stime);
+    out[0] = '\0';
+    if (sysinfo(&si) == 0) {
+        unit = (double)si.mem_unit / 1024.0;
+        put_num(&p, &left, "mem_free_kb", (double)(si.freeram + si.bufferram) * unit);
+        put_num(&p, &left, "mem_total_kb", (double)si.totalram * unit);
+        put_num(&p, &left, "swap_total_kb", (double)si.totalswap * unit);
+        put_num(&p, &left, "swap_free_kb", (double)si.freeswap * unit);
+        put_num(&p, &left, "load1", si.loads[0] / 65536.0);
     }
-    proc_line("/proc/loadavg", line, sizeof line);
-    sscanf(line, "%lf", &load1);
-    proc_line("/proc/pressure/memory", line, sizeof line);
-    sscanf(line, "some avg10=%lf", &mem_some);
-    proc_line("/proc/pressure/cpu", line, sizeof line);
-    sscanf(line, "some avg10=%lf", &cpu_some);
+    put_num(&p, &left, "mem_available_kb", (double)proc_kb("/proc/meminfo", "MemAvailable"));
+    if (getrusage(RUSAGE_SELF, &ru) == 0) {
+        put_num(&p, &left, "proc_cpu_ms", ru.ru_utime.tv_sec * 1e3 + ru.ru_utime.tv_usec / 1e3 + ru.ru_stime.tv_sec * 1e3 +
+                                              ru.ru_stime.tv_usec / 1e3);
+    }
+    put_num(&p, &left, "ncpu", (double)sysconf(_SC_NPROCESSORS_ONLN));
     proc_line("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq", line, sizeof line);
-    sscanf(line, "%ld", &freq);
+    if (sscanf(line, "%ld", &freq) != 1) freq = -1;
     proc_line("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq", line, sizeof line);
-    sscanf(line, "%ld", &freq_max);
+    if (sscanf(line, "%ld", &freq_max) != 1) freq_max = -1;
+    put_num(&p, &left, "cpu_freq_khz", (double)freq);
+    put_num(&p, &left, "cpu_freq_max_khz", (double)freq_max);
+    put_num(&p, &left, "threads", (double)proc_kb("/proc/self/status", "Threads"));
     if ((d = opendir("/proc/self/fd")) != NULL) {
+        fds = -2; /* . and .. */
         while (readdir(d)) fds++;
         closedir(d);
-        fds -= 2; /* . and .. */
     }
-    snprintf(out, len,
-             "\"cpu_busy_ticks\":%llu,\"cpu_total_ticks\":%llu,\"proc_cpu_ticks\":%lu,\"clk_tck\":%ld,"
-             "\"ncpu\":%ld,\"load1\":%.2f,\"psi_mem_some10\":%.2f,\"psi_cpu_some10\":%.2f,"
-             "\"cpu_freq_khz\":%ld,\"cpu_freq_max_khz\":%ld,\"threads\":%ld,\"fds\":%ld,"
-             "\"swap_total_kb\":%ld,\"swap_free_kb\":%ld",
-             user + nice + sys + irq + softirq + steal, user + nice + sys + idle + iowait + irq + softirq + steal,
-             utime + stime, sysconf(_SC_CLK_TCK), sysconf(_SC_NPROCESSORS_ONLN), load1, mem_some, cpu_some, freq,
-             freq_max, threads, fds, proc_kb("/proc/meminfo", "SwapTotal"), proc_kb("/proc/meminfo", "SwapFree"));
+    put_num(&p, &left, "fds", (double)fds);
 }
 
 char *receiver_stats_json(void) {
@@ -756,12 +765,11 @@ char *receiver_stats_json(void) {
     if (asprintf(&json,
                  "{\"running\":%s,\"connections\":%d,\"video_frames\":%" PRIuFAST64 ",\"video_bytes\":%" PRIuFAST64
                  ",\"audio_packets\":%" PRIuFAST64 ",\"audio_bytes\":%" PRIuFAST64 ",\"audio_ct\":%d,\"audio_concealed_ms\":%" PRIu64 ",\"keyframes\":%" PRIu64
-                 ",\"rss_kb\":%ld,\"rss_peak_kb\":%ld,\"mem_available_kb\":%ld,%s}",
+                 ",\"rss_kb\":%ld,\"rss_peak_kb\":%ld%s}",
                  g_raop ? "true" : "false", atomic_load(&g_connections), atomic_load(&g_video_frames),
                  atomic_load(&g_video_bytes), atomic_load(&g_audio_packets), atomic_load(&g_audio_bytes),
                  atomic_load(&g_audio_ct), concealed * 1000 / 44100, keyframes,
-                 proc_kb("/proc/self/status", "VmRSS"), proc_kb("/proc/self/status", "VmHWM"),
-                 proc_kb("/proc/meminfo", "MemAvailable"), sys) < 0)
+                 proc_kb("/proc/self/status", "VmRSS"), proc_kb("/proc/self/status", "VmHWM"), sys) < 0)
         json = NULL;
     return json;
 }

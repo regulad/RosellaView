@@ -29,6 +29,9 @@ const STALL_MS = 2500;
 // 2 min of a Mac's 8 Mbit/s) and playback freeze. A remove stops at the next
 // sync sample, which fmp4.c flags at least once a second (DECISIONS.md D6).
 const BACK_BUFFER_S = 10;
+// A/B test (DECISIONS.md D6 "To revisit"): false lets the player manage the
+// buffer alone, now that senders send keyframes.
+const TRIM_ENABLED = true;
 const TRIM_EVERY_MS = 5000;
 const STALL_MIN_FRAMES = 30;
 
@@ -149,7 +152,7 @@ export class MirrorPlayer {
     const sb = this.buffer;
     const vp = this.player;
     const now = Date.now();
-    if (!sb || !vp || !this.isVideo || (!force && now - this.lastTrim < TRIM_EVERY_MS)) {
+    if (!TRIM_ENABLED || !sb || !vp || !this.isVideo || (!force && now - this.lastTrim < TRIM_EVERY_MS)) {
       return false;
     }
     this.lastTrim = now;

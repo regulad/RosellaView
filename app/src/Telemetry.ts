@@ -113,7 +113,7 @@ function flatten(data: Record<string, unknown>): Record<string, string | number 
 export type PlayerMetrics = {appended: number; aheadMs: number; behindMs: number; queue: number; readyState: number};
 
 let previous: {t: number; s: Record<string, number>} | null = null;
-let prevCpu: {total: number; busy: number; proc: number} | null = null;
+let prevCpu: {t: number; ms: number} | null = null;
 
 /** Called every few seconds while a sender is connected. */
 export function receiverStats(s: Record<string, unknown>, video: PlayerMetrics | null, audio: PlayerMetrics | null): void {
@@ -132,33 +132,44 @@ export function receiverStats(s: Record<string, unknown>, video: PlayerMetrics |
     });
   }
   previous = {t: now, s: {...cur}};
-  // Memory: the app's own, and the device's (the media buffers may live in
-  // OS services rather than in our process).
-  if (cur.rss_kb > 0) {
-    metrics.gauge('process.rss', cur.rss_kb / 1024, {unit: 'megabyte', attributes});
-    metrics.gauge('process.rss_peak', cur.rss_peak_kb / 1024, {unit: 'megabyte', attributes});
+  // System and process figures; each is null when the sandbox can't provide
+  // it (native/src/receiver.c system_stats), and then isn't reported.
+  const has = (k: string) => typeof cur[k] === 'number' && cur[k] >= 0;
+  const mb = (k: string) => cur[k] / 1024;
+  const gauge = (name: string, value: number, unit?: string) => metrics.gauge(name, value, {unit, attributes});
+  if (has('rss_kb')) {
+    gauge('process.rss', mb('rss_kb'), 'megabyte');
+    gauge('process.rss_peak', mb('rss_peak_kb'), 'megabyte');
   }
-  if (cur.mem_available_kb > 0) {
-    metrics.gauge('system.mem_available', cur.mem_available_kb / 1024, {unit: 'megabyte', attributes});
+  if (has('mem_available_kb')) {
+    gauge('system.mem_available', mb('mem_available_kb'), 'megabyte');
   }
-  if (cur.swap_total_kb > 0) {
-    metrics.gauge('system.swap_used', (cur.swap_total_kb - cur.swap_free_kb) / 1024, {unit: 'megabyte', attributes});
+  if (has('mem_free_kb')) {
+    gauge('system.mem_free', mb('mem_free_kb'), 'megabyte');
   }
-  // CPU: device-wide busy share, and our process's share of the whole device.
-  if (prevCpu && cur.cpu_total_ticks > prevCpu.total) {
-    const total = cur.cpu_total_ticks - prevCpu.total; // summed over all cores
-    metrics.gauge('cpu.system', (100 * (cur.cpu_busy_ticks - prevCpu.busy)) / total, {unit: 'percent', attributes});
-    metrics.gauge('cpu.process', (100 * (cur.proc_cpu_ticks - prevCpu.proc)) / total, {unit: 'percent', attributes});
+  if (has('swap_total_kb') && has('swap_free_kb') && cur.swap_total_kb > 0) {
+    gauge('system.swap_used', (cur.swap_total_kb - cur.swap_free_kb) / 1024, 'megabyte');
   }
-  prevCpu = {total: cur.cpu_total_ticks, busy: cur.cpu_busy_ticks, proc: cur.proc_cpu_ticks};
-  metrics.gauge('cpu.freq', cur.cpu_freq_khz / 1000, {unit: 'megahertz', attributes});
-  metrics.gauge('cpu.freq_max', cur.cpu_freq_max_khz / 1000, {unit: 'megahertz', attributes});
-  metrics.gauge('system.load1', cur.load1, {attributes});
-  // Pressure stall information: % of the last 10 s some task waited on memory / CPU.
-  metrics.gauge('system.pressure.memory', cur.psi_mem_some10, {unit: 'percent', attributes});
-  metrics.gauge('system.pressure.cpu', cur.psi_cpu_some10, {unit: 'percent', attributes});
-  metrics.gauge('process.threads', cur.threads, {attributes});
-  metrics.gauge('process.fds', cur.fds, {attributes});
+  if (has('load1')) {
+    gauge('system.load1', cur.load1);
+  }
+  // Our CPU time as a share of the whole device (all cores).
+  if (has('proc_cpu_ms') && has('ncpu') && prevCpu && now > prevCpu.t) {
+    gauge('cpu.process', (100 * (cur.proc_cpu_ms - prevCpu.ms)) / ((now - prevCpu.t) * cur.ncpu), 'percent');
+  }
+  prevCpu = has('proc_cpu_ms') ? {t: now, ms: cur.proc_cpu_ms} : null;
+  if (has('cpu_freq_khz')) {
+    gauge('cpu.freq', cur.cpu_freq_khz / 1000, 'megahertz');
+  }
+  if (has('cpu_freq_max_khz')) {
+    gauge('cpu.freq_max', cur.cpu_freq_max_khz / 1000, 'megahertz');
+  }
+  if (has('threads')) {
+    gauge('process.threads', cur.threads);
+  }
+  if (has('fds')) {
+    gauge('process.fds', cur.fds);
+  }
   metrics.gauge('video.keyframes', cur.keyframes, {attributes});
   if (video) {
     metrics.gauge('video.buffer_ahead', video.aheadMs, {unit: 'millisecond', attributes});
