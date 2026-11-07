@@ -131,6 +131,15 @@ export function receiverStats(s: Record<string, unknown>, video: PlayerMetrics |
     });
   }
   previous = {t: now, s: {...cur}};
+  // Memory: the app's own, and the device's (the media buffers may live in
+  // OS services rather than in our process).
+  if (cur.rss_kb > 0) {
+    metrics.gauge('process.rss', cur.rss_kb / 1024, {unit: 'megabyte', attributes});
+    metrics.gauge('process.rss_peak', cur.rss_peak_kb / 1024, {unit: 'megabyte', attributes});
+  }
+  if (cur.mem_available_kb > 0) {
+    metrics.gauge('system.mem_available', cur.mem_available_kb / 1024, {unit: 'megabyte', attributes});
+  }
   metrics.gauge('video.keyframes', cur.keyframes, {attributes});
   if (video) {
     metrics.gauge('video.buffer_ahead', video.aheadMs, {unit: 'millisecond', attributes});

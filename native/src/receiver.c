@@ -670,6 +670,23 @@ void receiver_crash_for_test(void) {
     *p = 1;
 }
 
+/* Value of "key:" (in kB) in a /proc file such as /proc/self/status, or -1. */
+static long proc_kb(const char *path, const char *key) {
+    char line[128];
+    long kb = -1;
+    size_t n = strlen(key);
+    FILE *f = fopen(path, "r");
+    if (!f) return -1;
+    while (fgets(line, sizeof line, f)) {
+        if (strncmp(line, key, n) == 0 && line[n] == ':') {
+            kb = strtol(line + n + 1, NULL, 10);
+            break;
+        }
+    }
+    fclose(f);
+    return kb;
+}
+
 char *receiver_stats_json(void) {
     char *json = NULL;
     uint64_t keyframes = 0, concealed = 0;
@@ -681,10 +698,13 @@ char *receiver_stats_json(void) {
     pthread_mutex_unlock(&g_audio_lock);
     if (asprintf(&json,
                  "{\"running\":%s,\"connections\":%d,\"video_frames\":%" PRIuFAST64 ",\"video_bytes\":%" PRIuFAST64
-                 ",\"audio_packets\":%" PRIuFAST64 ",\"audio_bytes\":%" PRIuFAST64 ",\"audio_ct\":%d,\"audio_concealed_ms\":%" PRIu64 ",\"keyframes\":%" PRIu64 "}",
+                 ",\"audio_packets\":%" PRIuFAST64 ",\"audio_bytes\":%" PRIuFAST64 ",\"audio_ct\":%d,\"audio_concealed_ms\":%" PRIu64 ",\"keyframes\":%" PRIu64
+                 ",\"rss_kb\":%ld,\"rss_peak_kb\":%ld,\"mem_available_kb\":%ld}",
                  g_raop ? "true" : "false", atomic_load(&g_connections), atomic_load(&g_video_frames),
                  atomic_load(&g_video_bytes), atomic_load(&g_audio_packets), atomic_load(&g_audio_bytes),
-                 atomic_load(&g_audio_ct), concealed * 1000 / 44100, keyframes) < 0)
+                 atomic_load(&g_audio_ct), concealed * 1000 / 44100, keyframes,
+                 proc_kb("/proc/self/status", "VmRSS"), proc_kb("/proc/self/status", "VmHWM"),
+                 proc_kb("/proc/meminfo", "MemAvailable")) < 0)
         json = NULL;
     return json;
 }
