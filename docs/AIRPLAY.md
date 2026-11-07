@@ -17,7 +17,9 @@ These are findings about AirPlay senders and libairplay (UxPlay's `lib/`), seen 
 ## iOS (iPhone18,1, User-Agent AirPlay/980.77.1)
 
 - **Video:** mirrors at up to 60 fps, at the screen's aspect ratio (498×1080 in portrait), dropping to 20–45 fps when little changes.
-  - **Video playback inside apps is mirrored at about 30 fps**, while UI scrolling reaches about 60 (2026-11-07). A 60 fps test video with an every-other-frame flasher arrived at 25–31 fps and looked frozen in one state: aliasing at the sender. The TV showed every frame it received (`video.fps_shown` equal to `video.fps`, 0 `video.dropped`). To test a true 60 fps path, use content the phone draws live, such as a page animating on every frame, not a video file.
+  - **Full-screen video switches the stream to a full-frame video mode.** The SPS changes from the screen's 498×1080 to 1920×1080, and audio restarts at the same moment (2026-11-07). A 60 fps test video with an every-other-frame flasher then arrived at 25–31 fps and looked frozen in one state: aliasing at the sender. The TV showed every frame it received (`video.fps_shown` equal to `video.fps`, 0 `video.dropped`).
+    - The mode isn't capped at 30: it carried 58–60 fps for about 15 s at 1920×1080, likely while player controls were on screen. So the 30 fps was probably the source itself (the app playing a 30 fps rendition), not iOS. Unconfirmed.
+    - To test a true 60 fps path, use a known 60 fps source (a local file, or YouTube with "Stats for nerds" showing 60), or content the phone draws live.
   - The SPS has **no VUI timing**.
   - Left alone, it sends **one keyframe (IDR) per session**: one in a 9-minute run. It sends another on a rotation, a new session, or a `forceKeyFrame` request on the event channel.
 - **Audio:**
