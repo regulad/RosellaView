@@ -1,6 +1,7 @@
-// JS face of xyz.regulad.rosellaview.surface: a native view that owns a GL
-// surface and renders into it on its own thread (proof of concept: a
-// full-range NV12 grey step chart, converted by our own shader).
+// JS face of xyz.regulad.rosellaview.surface: a native view that shows the
+// mirrored video. It takes the H.264 straight from the receiver, decodes it
+// with the hardware decoder and renders it with its own shader, full range
+// intact (docs/DECISIONS.md D12). Mount it full screen; it letterboxes.
 //
 // Copyright (C) 2026 Parker Wahle
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -25,11 +26,17 @@ register(NAME, {
   },
 });
 
-export type RosellaSurfaceStatus = {nativeEvent: {message: string}};
+export type RosellaSurfaceStatus = {
+  nativeEvent: {
+    /** "ready" once it's decoding; "failed" if it can't (use MSE instead); else "". */
+    state: '' | 'ready' | 'failed';
+    message: string;
+  };
+};
 
 export type RosellaSurfaceProps = {
   style?: unknown;
-  /** Progress and errors from the native view and its GL thread. */
+  /** Progress and errors from the native view and its render thread. */
   onStatus?: (event: RosellaSurfaceStatus) => void;
 };
 

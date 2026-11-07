@@ -228,7 +228,6 @@ static void emit_init(fmp4_muxer *m) {
     u16(&w, (uint16_t)m->pps_len);
     put(&w, m->pps, m->pps_len);
     end(&w, avcc);
-#ifndef FMP4_NO_COLR
     {
         /* The colour description and range, as a container box as well as in
          * the SPS: MP4 players often read only this. iOS sends full-range
@@ -244,7 +243,6 @@ static void emit_init(fmp4_muxer *m) {
             end(&w, colr);
         }
     }
-#endif
     end(&w, avc1);
     end(&w, stsd);
     a = fullbox(&w, "stts", 0, 0); u32(&w, 0); end(&w, a);

@@ -263,6 +263,25 @@ static napi_value js_is_running(napi_env env, napi_callback_info info) {
     return make_bool(env, receiver_is_running());
 }
 
+/* setVideoLatency(ms): native video's capture-to-screen latency */
+static napi_value js_set_video_latency(napi_env env, napi_callback_info info) {
+    size_t argc = 1;
+    napi_value argv[1];
+    int32_t ms = 0;
+    napi_get_cb_info(env, info, &argc, argv, NULL, NULL);
+    if (argc >= 1 && napi_get_value_int32(env, argv[0], &ms) == napi_ok) receiver_set_video_latency(ms);
+    return make_bool(env, 1);
+}
+
+/* nativeVideo() → JSON string */
+static napi_value js_native_video(napi_env env, napi_callback_info info) {
+    char *json = receiver_native_video_json();
+    napi_value v = make_string(env, json ? json : "{}");
+    (void)info;
+    free(json);
+    return v;
+}
+
 /* getStats() → JSON string */
 static napi_value js_get_stats(napi_env env, napi_callback_info info) {
     char *json = receiver_stats_json();
@@ -289,6 +308,8 @@ static napi_value module_init(napi_env env, napi_value exports) {
         {"crashForTest", NULL, js_crash_for_test, NULL, NULL, NULL, napi_default, NULL},
         {"setWatermark", NULL, js_set_watermark, NULL, NULL, NULL, napi_default, NULL},
         {"getStats", NULL, js_get_stats, NULL, NULL, NULL, napi_default, NULL},
+        {"setVideoLatency", NULL, js_set_video_latency, NULL, NULL, NULL, napi_default, NULL},
+        {"nativeVideo", NULL, js_native_video, NULL, NULL, NULL, napi_default, NULL},
     };
     napi_define_properties(env, exports, sizeof props / sizeof props[0], props);
     return exports;

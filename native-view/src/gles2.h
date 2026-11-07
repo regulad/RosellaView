@@ -20,16 +20,12 @@ typedef float GLfloat;
 typedef char GLchar;
 typedef unsigned char GLubyte;
 
-#define GL_NO_ERROR 0
 #define GL_FALSE 0
-#define GL_TRUE 1
 #define GL_TRIANGLE_STRIP 0x0005
 #define GL_UNSIGNED_BYTE 0x1401
 #define GL_FLOAT 0x1406
-#define GL_RGBA 0x1908
 #define GL_LUMINANCE 0x1909
 #define GL_LUMINANCE_ALPHA 0x190A
-#define GL_VENDOR 0x1F00
 #define GL_RENDERER 0x1F01
 #define GL_VERSION 0x1F02
 #define GL_TEXTURE_2D 0x0DE1
@@ -37,7 +33,6 @@ typedef unsigned char GLubyte;
 #define GL_TEXTURE_MIN_FILTER 0x2801
 #define GL_TEXTURE_WRAP_S 0x2802
 #define GL_TEXTURE_WRAP_T 0x2803
-#define GL_NEAREST 0x2600
 #define GL_LINEAR 0x2601
 #define GL_CLAMP_TO_EDGE 0x812F
 #define GL_TEXTURE0 0x84C0
@@ -49,7 +44,6 @@ typedef unsigned char GLubyte;
 #define GL_COMPILE_STATUS 0x8B81
 #define GL_LINK_STATUS 0x8B82
 #define GL_FRAMEBUFFER 0x8D40
-#define GL_FRAMEBUFFER_BINDING 0x8CA6
 #define GL_FRAMEBUFFER_COMPLETE 0x8CD5
 #define GL_COLOR_ATTACHMENT0 0x8CE0
 #define GL_TEXTURE2 0x84C2
@@ -59,7 +53,6 @@ typedef unsigned char GLubyte;
 
 // X(return type, name, parameter list)
 #define ROSELLA_GL_FUNCTIONS(X)                                                                            \
-  X(GLenum, glGetError, (void))                                                                            \
   X(const GLubyte*, glGetString, (GLenum name))                                                            \
   X(GLuint, glCreateShader, (GLenum type))                                                                 \
   X(void, glShaderSource, (GLuint shader, GLsizei count, const GLchar* const* string, const GLint* length)) \
@@ -75,12 +68,18 @@ typedef unsigned char GLubyte;
   X(void, glUseProgram, (GLuint program))                                                                  \
   X(GLint, glGetUniformLocation, (GLuint program, const GLchar* name))                                     \
   X(void, glUniform1i, (GLint location, GLint v0))                                                         \
+  X(void, glUniform1f, (GLint location, GLfloat v0))                                                       \
+  X(void, glUniform2f, (GLint location, GLfloat v0, GLfloat v1))                                           \
+  X(void, glUniform4f, (GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3))                   \
   X(void, glGenTextures, (GLsizei n, GLuint* textures))                                                    \
   X(void, glBindTexture, (GLenum target, GLuint texture))                                                  \
   X(void, glTexParameteri, (GLenum target, GLenum pname, GLint param))                                     \
   X(void, glTexImage2D,                                                                                    \
     (GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border,       \
      GLenum format, GLenum type, const void* pixels))                                                      \
+  X(void, glTexSubImage2D,                                                                                 \
+    (GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, \
+     GLenum type, const void* pixels))                                                                     \
   X(void, glPixelStorei, (GLenum pname, GLint param))                                                      \
   X(void, glActiveTexture, (GLenum texture))                                                               \
   X(void, glViewport, (GLint x, GLint y, GLsizei width, GLsizei height))                                   \
@@ -96,7 +95,4 @@ typedef unsigned char GLubyte;
   X(void, glGenFramebuffers, (GLsizei n, GLuint* framebuffers))                                            \
   X(void, glFramebufferTexture2D,                                                                          \
     (GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level))                    \
-  X(void, glGetIntegerv, (GLenum pname, GLint* data))                                                      \
-  X(void, glReadPixels,                                                                                    \
-    (GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, void* pixels))         \
   X(void, glFinish, (void))

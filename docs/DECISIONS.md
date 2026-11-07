@@ -188,7 +188,7 @@ The laptop's `create_ap` AP now runs with `IEEE80211N=1`, started via `create_ap
 - AAC-LC passthrough (ct 4) can't be shifted, since it isn't decoded. No sender has used it so far.
 - Metrics: `av.offset` (distance from target; negative means audio late), `av.delay` and `av.corrections`.
 
-## D9. Known limitation: full-range video is clipped by the MSE path (2026-11-07)
+## D9. Known limitation: full-range video is clipped by the MSE path (2026-11-07; resolved by D12)
 
 **Finding:**
 - iOS mirrors **full-range** video: BT.709 primaries and matrix, sRGB transfer (13), and `video_full_range_flag` 1, in the SPS. macOS sends limited range.
@@ -206,6 +206,8 @@ The laptop's `create_ap` AP now runs with `IEEE80211N=1`, started via `create_ap
 - Ship with the limitation and document it (COMPATIBILITY.md).
 - The muxer still writes the `colr` box from the sender's SPS: it's correct per ISO BMFF, and a future Vega update may honour it.
 - `video_init` reports the sender's range and colour codes, and the `video.range` tag marks affected sessions.
+
+**Update:** the native pipeline (D12) shows full range correctly and is now the default; this applies only to the MSE fallback.
 
 **Ways out, none cheap:**
 - **Remapping the pixels** (full → limited) needs a decode and re-encode of every frame. That's beyond this CPU at 1080p.
@@ -250,8 +252,31 @@ The laptop's `create_ap` AP now runs with `IEEE80211N=1`, started via `create_ap
 - The library must be named `<uiComponentName>.so`.
 - It needs its own package: one autolink entry can't have both `libraryName` and `uiComponentName`.
 
-**Next:** feed decoded mirroring video through it. This removes MSE's ~450 ms buffer and the range clipping. Open question: the decoder.
-- FFmpeg software (in our build, CPU-bound)
-- MediaTek V4L2 `/dev/video0` (hardware; untested from the sandbox)
+**Next:** done in D12, which feeds the mirrored video through it.
 
-Behind the dev flag `surface-test` for now.
+## D12. Native video: hardware decode through media_transform, rendered on our own surface (2026-11-07)
+
+**Decision:** Mirrored video no longer goes through MSE. The receiver hands each H.264 access unit to the native surface component (D11), which decodes it with the OS's hardware decoder and renders it with our own shader. MSE stays as an automatic fallback.
+
+**Why:**
+- **Full range** is shown correctly (D9). The decoder passes samples through untouched: a full-range chart decoded bit-exactly, matching FFmpeg.
+- **Cheap:** about 4 ms per frame in the decoder. 1080p60 keeps up, at about 370 fps unpaced. The CPU de-tile costs about 22% of one core at 1080p60; FFmpeg software decode would need about 1.2 cores.
+- **No MSE workarounds:** no fMP4, back-buffer trim (D6) or periodic keyframes (D7). Lip sync moves the video instead of cutting audio.
+
+**How:**
+- **Bridge** (`native/include/rosella_video.h`): `libRosellaView.so` exports `rosella_video_attach`/`_report`/`_latency_ms`/`_request_keyframe`; the component finds them with `dlopen(RTLD_NOLOAD)` + `dlsym`. While a consumer is attached, `cb_video_process` sends access units to it instead of the muxer.
+- **Decoder** (`native-view/src/Decoder.cpp`): `IMediaFactory::createTransform` with mime `video/h264` (`video/avc` fails to configure) and the SPS's resolution, reopened when the size changes. Input: ARGB8888 graphics buffers with `BufferMime::H264`. Output: MediaTek MM21 tiles, mapped and de-tiled on the CPU, then uploaded as NV12 textures.
+- **Rendering:** the shader uses the stream's own range and matrix from the SPS (iOS: full range; macOS: limited) and letterboxes into 1920×1080 scan-out buffers. A buffer is reused only once the display has released it.
+- **Timing:** a frame is shown `latency` ms after its capture time, which libairplay's NTP sync maps onto our clock.
+  - JS sets the latency (`Receiver.setVideoLatency`); the component eases towards it at 100 ms/s (at most a 10% speed change), so corrections never freeze or skip.
+  - AvSync takes the median offset of 5 readings, moves the latency within 80–1500 ms, and shifts audio only beyond those bounds. The audio player keeps its own latency cap.
+- **Recovery:** the component starts again at the next IDR, replaying the cached SPS/PPS to a new decoder, and asks for keyframes at most once a second. It restarts the decoder on a decode error, on a size change, or after 10+ frames in with nothing out for 2 s.
+- **Fallback:** if the bridge, GL or decoder can't start, the component reports `failed` and the app switches to MSE for the rest of the run. Dev flag `mse-video` forces MSE.
+
+**Gotchas found on the way:**
+- The decoder reports its **padded** size: 816×1088 for an 810×1080 SPS. The padding is zeros, which shows as a green edge. Draw the SPS's size, sampling only the centres of visible texels.
+- The decoder holds its newest picture until the next access unit arrives, so a sender gone quiet leaves one in flight. A stall check that counts time alone restarts it on every pause.
+- **A keyframe request before the stream's first frame ends macOS mirroring:** the Mac answers with an empty codec packet, which libairplay reads as non-H.264. `receiver_request_keyframe` refuses until the first frame.
+- With native video, the iPhone's lip sync is right at 0 ms delay. It needed +300 ms on MSE.
+
+**Risk:** `media_transform` is outside the OS compatibility contract. An OS update could break it, and the fallback then takes over. FFmpeg software decode is the plan B if the fallback's range clipping isn't acceptable.

@@ -44,5 +44,6 @@ These are findings about AirPlay senders and libairplay (UxPlay's `lib/`), seen 
   - **It never sent more than about 30 fps** (MacBook8,1, macOS 11), even for 60 fps content, so a 60 fps flasher aliases there too.
   - Like iOS, it sends IDRs only when asked (`forceKeyFrame`) or when the display mode changes, e.g. on leaving QuickTime's full screen.
   - Two keyframes were seen in a short session.
+  - **Don't ask for a keyframe before the first frame.** macOS answers a `forceKeyFrame` that arrives before mirroring has started sending with a type 0x01 (codec) packet with no payload. libairplay takes that for non-H.264 video and stops mirroring. iOS doesn't do this, but `receiver_request_keyframe` waits for the first frame for both.
 - **Audio:** AAC-ELD, as on iOS.
 - **Connections:** it connects over both IPv6 and IPv4 at once, then drops one of them (`conn_init` twice, then a `conn_destroy`).

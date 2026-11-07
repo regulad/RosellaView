@@ -25,7 +25,28 @@ interface NativeReceiver {
   crashForTest(): boolean;
   setWatermark(on: boolean): boolean;
   getStats(): string;
+  setVideoLatency(ms: number): boolean;
+  nativeVideo(): string;
 }
+
+/** The native video pipeline's state (rosellaview-surface; native/include/rosella_video.h). */
+export type NativeVideoState = {
+  /** A native surface is decoding the mirrored video (else it goes to MSE). */
+  attached: boolean;
+  /** Sender clock time of what's on screen now (ms; 0 before the first frame). */
+  sender_ms: number;
+  latency_ms: number;
+  decoded: number;
+  shown: number;
+  skipped: number;
+  late: number;
+  errors: number;
+  starts: number;
+  width: number;
+  height: number;
+  queued: number;
+  upload_ms: number;
+};
 
 const g = globalThis as {__turboModuleProxy?: (name: string) => unknown};
 const found = g.__turboModuleProxy ? (g.__turboModuleProxy('RosellaView') as NativeReceiver | null) : null;
@@ -74,5 +95,8 @@ export const Receiver = {
   crashForTest: (): boolean => native.crashForTest(),
   /** Audio carries a spoken "Preview." every 5 s while on (the default). */
   setWatermark: (on: boolean): boolean => native.setWatermark(on),
+  /** Native video: how long after capture frames are shown (ms). */
+  setVideoLatency: (ms: number): boolean => native.setVideoLatency(Math.round(ms)),
+  nativeVideo: (): NativeVideoState => JSON.parse(native.nativeVideo()) as NativeVideoState,
   stats: (): Record<string, unknown> => JSON.parse(native.getStats()) as Record<string, unknown>,
 };

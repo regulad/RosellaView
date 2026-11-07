@@ -28,6 +28,7 @@
 #include "audio.h"
 #include "dnssd.h"
 #include "fmp4.h"
+#include "rosella_video.h"
 #include "sentry.h"
 #include "sps.h"
 #include "logger.h"
@@ -119,25 +120,29 @@ static void audio_reset_locked(void) {
     pthread_mutex_unlock(&g_audio_lock);
 }
 
+/* A new SPS: its size and colour signalling. Full range is clipped by Vega's
+ * MSE video path (DECISIONS.md D9), so sessions can be told apart. `bytes` is
+ * the init segment's size (0 on the native path, which has none). */
+static void emit_video_init(const uint8_t *sps, size_t n, size_t bytes) {
+    char hex[2 * 256 + 1];
+    unsigned w = 0, h = 0, prim = 2, trc = 2, mat = 2, full = 0;
+    int have;
+    if (n > 256) n = 256;
+    for (size_t i = 0; i < n; i++) sprintf(hex + 2 * i, "%02x", sps[i]);
+    hex[2 * n] = 0;
+    sps_get_size(sps, n, &w, &h);
+    have = sps_get_colour(sps, n, &prim, &trc, &mat, &full) == 0;
+    emit("{\"type\":\"video_init\",\"bytes\":%zu,\"width\":%u,\"height\":%u,\"sender_sps\":\"%s\","
+         "\"full_range\":%s,\"primaries\":%u,\"transfer\":%u,\"matrix\":%u}",
+         bytes, w, h, hex, have ? (full ? "true" : "false") : "null", prim, trc, mat);
+}
+
 static void mux_output(void *ctx, enum fmp4_kind kind, uint8_t *data, size_t len, uint64_t ts_ns) {
     (void)ctx;
     if (kind == FMP4_INIT && g_mux) { /* called under g_mux_lock from fmp4_push_h264 */
         uint8_t sps[256];
-        char hex[2 * sizeof sps + 1];
         size_t n = fmp4_get_sender_sps(g_mux, sps, sizeof sps);
-        unsigned w = 0, h = 0;
-        for (size_t i = 0; i < n; i++) sprintf(hex + 2 * i, "%02x", sps[i]);
-        hex[2 * n] = 0;
-        sps_get_size(sps, n, &w, &h);
-        {
-            /* The sender's colour signalling: full range is clipped by Vega's
-             * MSE video path (DECISIONS.md D9), so sessions can be told apart. */
-            unsigned prim = 2, trc = 2, mat = 2, full = 0;
-            int have = sps_get_colour(sps, n, &prim, &trc, &mat, &full) == 0;
-            emit("{\"type\":\"video_init\",\"bytes\":%zu,\"width\":%u,\"height\":%u,\"sender_sps\":\"%s\","
-                 "\"full_range\":%s,\"primaries\":%u,\"transfer\":%u,\"matrix\":%u}",
-                 len, w, h, hex, have ? (full ? "true" : "false") : "null", prim, trc, mat);
-        }
+        emit_video_init(sps, n, len);
     }
     if (g_video_sink) {
         g_video_sink(kind == FMP4_INIT ? 0 : 1, data, len, (double)ts_ns / 1e6);
@@ -267,6 +272,149 @@ static void cb_report_client_details(void *cls, const char *os_name, const char 
     free(mac);
 }
 
+/* ---------- native video (rosella_video.h) ---------- */
+
+#define ROSELLA_EXPORT __attribute__((visibility("default")))
+/* Initial capture-to-screen latency for native video; A/V sync then moves it
+ * to match the audio player (app/src/AvSync.ts). */
+#define NATIVE_LATENCY_DEFAULT_MS 350
+
+static pthread_mutex_t g_consumer_lock = PTHREAD_MUTEX_INITIALIZER;
+static rosella_video_consumer g_consumer;
+static int g_consumer_on;
+static uint8_t g_native_sps[256]; /* last SPS seen on the native path */
+static size_t g_native_sps_len;
+static atomic_uint_fast64_t g_native_keyframes;
+static atomic_int g_native_latency_ms = NATIVE_LATENCY_DEFAULT_MS;
+/* Frames of the current mirroring stream so far. A keyframe request before
+ * the first one makes macOS answer with an empty codec packet, which
+ * libairplay takes for non-H.264 video and ends mirroring on. */
+static atomic_uint_fast64_t g_stream_frames;
+static pthread_mutex_t g_native_stats_lock = PTHREAD_MUTEX_INITIALIZER;
+static rosella_video_stats g_native_stats;
+
+ROSELLA_EXPORT int rosella_video_attach(const rosella_video_consumer *consumer) {
+    pthread_mutex_lock(&g_consumer_lock);
+    g_consumer_on = consumer != NULL;
+    if (consumer) g_consumer = *consumer;
+    g_native_sps_len = 0;
+    pthread_mutex_unlock(&g_consumer_lock);
+    pthread_mutex_lock(&g_native_stats_lock);
+    memset(&g_native_stats, 0, sizeof g_native_stats);
+    pthread_mutex_unlock(&g_native_stats_lock);
+    emit("{\"type\":\"native_video\",\"attached\":%s}", consumer ? "true" : "false");
+    /* A new consumer can only start at an IDR; the muxer, after a detach,
+     * starts at the next IDR too. */
+    if (!consumer) mux_reset();
+    receiver_request_keyframe();
+    return ROSELLA_VIDEO_ABI;
+}
+
+ROSELLA_EXPORT int rosella_video_request_keyframe(void) { return receiver_request_keyframe(); }
+
+ROSELLA_EXPORT int rosella_video_latency_ms(void) { return atomic_load(&g_native_latency_ms); }
+
+ROSELLA_EXPORT void rosella_video_report(const rosella_video_stats *stats) {
+    pthread_mutex_lock(&g_native_stats_lock);
+    g_native_stats = *stats;
+    pthread_mutex_unlock(&g_native_stats_lock);
+}
+
+void receiver_set_video_latency(int ms) { atomic_store(&g_native_latency_ms, ms); }
+
+/* Hands an access unit to the native consumer; returns 0 if none is attached. */
+static int native_video_push(const uint8_t *au, size_t len, uint64_t sender_ns, uint64_t local_ns) {
+    rosella_video_frame f;
+    const uint8_t *sps = NULL;
+    size_t sps_len = 0, i = 0;
+    pthread_mutex_lock(&g_consumer_lock);
+    if (!g_consumer_on) {
+        pthread_mutex_unlock(&g_consumer_lock);
+        return 0;
+    }
+    memset(&f, 0, sizeof f);
+    f.data = au;
+    f.len = len;
+    f.sender_ns = sender_ns;
+    f.local_ns = local_ns;
+    f.matrix = 2;
+    /* NAL types: 5 IDR slice, 7 SPS. */
+    while (i + 3 < len) {
+        if (au[i] == 0 && au[i + 1] == 0 && au[i + 2] == 1) {
+            size_t start = i + 3, end = start;
+            int type = au[start] & 0x1f;
+            while (end + 3 <= len && !(au[end] == 0 && au[end + 1] == 0 && (au[end + 2] == 1 || au[end + 2] == 0)))
+                end++;
+            if (end + 3 > len) end = len;
+            if (type == 5) f.idr = 1;
+            if (type == 7 && !sps) {
+                sps = au + start;
+                sps_len = end - start;
+            }
+            i = end;
+        } else {
+            i++;
+        }
+    }
+    if (sps) {
+        unsigned w = 0, h = 0, prim, trc, mat = 2, full = 0;
+        if (sps_get_size(sps, sps_len, &w, &h) == 0) {
+            f.width = w;
+            f.height = h;
+        }
+        if (sps_get_colour(sps, sps_len, &prim, &trc, &mat, &full) == 0) {
+            f.full_range = full != 0;
+            f.matrix = mat;
+        }
+        if (sps_len <= sizeof g_native_sps && (sps_len != g_native_sps_len || memcmp(sps, g_native_sps, sps_len))) {
+            memcpy(g_native_sps, sps, sps_len);
+            g_native_sps_len = sps_len;
+            emit_video_init(sps, sps_len, 0);
+        }
+    }
+    if (f.idr) atomic_fetch_add(&g_native_keyframes, 1);
+    g_consumer.frame(g_consumer.ctx, &f);
+    pthread_mutex_unlock(&g_consumer_lock);
+    return 1;
+}
+
+static void native_video_reset(void) {
+    pthread_mutex_lock(&g_consumer_lock);
+    if (g_consumer_on && g_consumer.reset) g_consumer.reset(g_consumer.ctx);
+    pthread_mutex_unlock(&g_consumer_lock);
+}
+
+char *receiver_native_video_json(void) {
+    rosella_video_stats st;
+    struct timespec now;
+    double sender_ms = 0;
+    char *json = NULL;
+    int on;
+    pthread_mutex_lock(&g_consumer_lock);
+    on = g_consumer_on;
+    pthread_mutex_unlock(&g_consumer_lock);
+    pthread_mutex_lock(&g_native_stats_lock);
+    st = g_native_stats;
+    pthread_mutex_unlock(&g_native_stats_lock);
+    clock_gettime(CLOCK_REALTIME, &now);
+    if (st.shown_sender_ns) {
+        /* What's on screen now: the last frame shown, advanced by the time
+         * since, up to a frame's worth or two (it stays until the next). */
+        uint64_t now_ns = (uint64_t)now.tv_sec * 1000000000ull + (uint64_t)now.tv_nsec;
+        uint64_t since = now_ns > st.shown_local_ns ? now_ns - st.shown_local_ns : 0;
+        if (since > 50000000ull) since = 50000000ull;
+        sender_ms = (double)(st.shown_sender_ns + since) / 1e6;
+    }
+    if (asprintf(&json,
+                 "{\"attached\":%s,\"sender_ms\":%.3f,\"latency_ms\":%d,\"decoded\":%" PRIu64 ",\"shown\":%" PRIu64
+                 ",\"skipped\":%" PRIu64 ",\"late\":%" PRIu64 ",\"errors\":%" PRIu64 ",\"starts\":%" PRIu64
+                 ",\"width\":%u,\"height\":%u,\"queued\":%d,\"upload_ms\":%.2f}",
+                 on ? "true" : "false", sender_ms, atomic_load(&g_native_latency_ms), st.decoded, st.shown,
+                 st.skipped, st.late, st.errors, st.starts, st.width, st.height, st.queued, st.upload_ms) < 0)
+        json = NULL;
+    return json;
+}
+
 static void cb_video_process(void *cls, raop_ntp_t *ntp, video_decode_struct *data) {
     (void)cls;
     (void)ntp;
@@ -286,12 +434,14 @@ static void cb_video_process(void *cls, raop_ntp_t *ntp, video_decode_struct *da
         g_timing.frames++;
     }
     pthread_mutex_unlock(&g_timing_lock);
+    atomic_fetch_add(&g_stream_frames, 1);
     if (atomic_fetch_add(&g_video_frames, 1) == 0) {
         emit("{\"type\":\"first_video_frame\",\"h265\":%s,\"nal_count\":%d,\"bytes\":%d}",
              data->is_h265 ? "true" : "false", data->nal_count, data->data_len);
     }
     atomic_fetch_add(&g_video_bytes, (uint_fast64_t)data->data_len);
     if (data->is_h265) return; /* H.265 isn't advertised; ignore it if it arrives */
+    if (native_video_push(data->data, (size_t)data->data_len, data->ntp_time_remote, data->ntp_time_local)) return;
     pthread_mutex_lock(&g_mux_lock);
     if (g_mux) fmp4_push_h264(g_mux, data->data, (size_t)data->data_len, data->ntp_time_remote);
     pthread_mutex_unlock(&g_mux_lock);
@@ -312,6 +462,7 @@ static void cb_video_resume(void *cls) { (void)cls; emit("{\"type\":\"video_resu
 static void cb_video_flush(void *cls) {
     (void)cls;
     mux_reset();
+    native_video_reset();
     emit("{\"type\":\"video_flush\"}");
 }
 static void cb_audio_flush(void *cls) {
@@ -322,6 +473,7 @@ static void cb_audio_flush(void *cls) {
 static void cb_video_reset(void *cls, reset_type_t reset_type) {
     (void)cls;
     mux_reset();
+    native_video_reset();
     emit("{\"type\":\"video_reset\",\"reset_type\":%d}", (int)reset_type);
 }
 
@@ -340,6 +492,7 @@ static int cb_video_set_codec_and_size(void *cls, video_codec_t codec, unsigned 
 
 static void cb_mirror_video_running(void *cls, bool is_running) {
     (void)cls;
+    atomic_store(&g_stream_frames, 0);
     emit("{\"type\":\"mirror_video_running\",\"running\":%s}", is_running ? "true" : "false");
 }
 
@@ -717,6 +870,8 @@ void receiver_shift_audio(int ms) {
 
 int receiver_request_keyframe(void) {
     int rc = -1;
+    /* A stream that hasn't started begins with a keyframe anyway. */
+    if (atomic_load(&g_stream_frames) == 0) return -1;
     pthread_mutex_lock(&g_lock);
     if (g_raop) rc = raop_request_keyframe(g_raop);
     pthread_mutex_unlock(&g_lock);
@@ -824,6 +979,7 @@ char *receiver_stats_json(void) {
     char sys[768];
     pthread_mutex_lock(&g_mux_lock);
     if (g_mux) keyframes = fmp4_keyframes(g_mux);
+    keyframes += atomic_load(&g_native_keyframes);
     pthread_mutex_unlock(&g_mux_lock);
     pthread_mutex_lock(&g_audio_lock);
     if (g_audio) concealed = audio_concealed(g_audio);

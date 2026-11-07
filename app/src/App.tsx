@@ -13,6 +13,7 @@ import {AvDelayOverlay} from './AvDelayOverlay';
 import {AvSync} from './AvSync';
 import {KeepAwake} from './KeepAwake';
 import {MirrorPlayer} from './MirrorPlayer';
+import {NativeVideo} from './NativeVideo';
 import {buyUnlock, cachedUnlocked, isUnlocked} from './Purchases';
 import {log, receiverEvent, receiverStats, resetStats, senderKind, warn} from './Telemetry';
 import {Watermark} from './Watermark';
@@ -34,14 +35,12 @@ function airplayVolume(db: number): number {
   return Math.pow(10, Math.min(0, db) / 20);
 }
 const SCREEN = Dimensions.get('window');
-// Stats run every 5 s; a keyframe is requested every other tick (10 s), inside
-// MirrorPlayer's 10 s back buffer.
+// Stats run every 5 s; with MSE video, a keyframe is requested every other
+// tick (10 s), inside MirrorPlayer's 10 s back buffer.
 const KEYFRAME_EVERY_TICKS = 2;
-// Development (proof of concept): `touch /scratch/dev-surface-test` from the
-// component shell, then relaunch: the idle screen shows our own GL surface
-// (a full-range grey step chart) instead of the normal idle UI. Read once.
-const SURFACE_TEST = Receiver.takeDevFlag('surface-test');
-
+// Development: `touch /scratch/dev-mse-video` from the component shell, then
+// relaunch, to use the MSE video path instead of the native one. Read once.
+const MSE_VIDEO = Receiver.takeDevFlag('mse-video');
 
 /** Largest box of the video's aspect ratio that fits the screen, centred. */
 function fit(w: number, h: number) {
@@ -63,6 +62,11 @@ export const App = () => {
   const [buying, setBuying] = useState(false);
   const [videoSize, setVideoSize] = useState<[number, number]>([0, 0]);
   const player = useRef<MirrorPlayer | null>(null);
+  // Video goes to the native pipeline (RosellaSurface) unless it has failed
+  // in this run; then to MSE (MirrorPlayer) for the rest of it.
+  const [nativeOk, setNativeOk] = useState(!MSE_VIDEO);
+  const useNative = useRef(!MSE_VIDEO);
+  const nativeVideo = useRef<NativeVideo | null>(null);
   const audio = useRef<MirrorPlayer | null>(null);
   const audioCt = useRef(0);
   const volume = useRef(1);
@@ -70,12 +74,6 @@ export const App = () => {
   const keepAwake = useRef(new KeepAwake(log));
   const avSync = useRef(new AvSync()).current;
   const [avDelay, setAvDelay] = useState(0);
-  useEffect(() => {
-    if (SURFACE_TEST) {
-      log('RosellaSurface: surface test enabled');
-    }
-  }, []);
-
   useEffect(() => {
     const closePlayer = () => {
       player.current?.close();
@@ -112,7 +110,11 @@ export const App = () => {
       }
     };
 
+    // MSE video only: native video bypasses JS (the surface takes it directly).
     Receiver.onVideo((kind, segment, senderMs) => {
+      if (useNative.current) {
+        return;
+      }
       if (kind === SegmentKind.Init && !player.current) {
         const p = new MirrorPlayer(log, {kind: 'video'}, recoverVideo);
         player.current = p;
@@ -159,9 +161,12 @@ export const App = () => {
           setMirroring(Boolean(e.running));
           if (e.running) {
             setAudioOnly(false);
+            // Each session starts from the default latency.
+            nativeVideo.current = useNative.current ? new NativeVideo() : null;
           }
           if (!e.running) {
             closePlayer();
+            nativeVideo.current = null;
           }
           break;
         case 'conn_destroy':
@@ -171,6 +176,7 @@ export const App = () => {
             setAudioOnly(false);
             closePlayer();
             closeAudio();
+            nativeVideo.current = null;
             resetStats();
           }
           break;
@@ -183,7 +189,14 @@ export const App = () => {
     const stats = setInterval(() => {
       const s = Receiver.stats();
       if ((s.connections as number) > 0) {
-        receiverStats(s, player.current?.metrics() ?? null, audio.current?.metrics() ?? null, avSync);
+        const nv = nativeVideo.current;
+        receiverStats(
+          s,
+          nv ? nv.metrics() : player.current?.metrics() ?? null,
+          audio.current?.metrics() ?? null,
+          avSync,
+          nv ? nv.state() : null,
+        );
         // iOS and macOS send one IDR per session unless asked; the player can
         // only drop played video (MirrorPlayer.trim) back to an IDR, so ask
         // for one every KEYFRAME_EVERY_TICKS (DECISIONS.md D7).
@@ -192,7 +205,7 @@ export const App = () => {
         }
       }
     }, 5000);
-    const sync = setInterval(() => avSync.tick(player.current, audio.current), 1000);
+    const sync = setInterval(() => avSync.tick(nativeVideo.current ?? player.current, audio.current), 1000);
     return () => {
       clearInterval(stats);
       clearInterval(sync);
@@ -261,20 +274,41 @@ export const App = () => {
     keepAwake.current.set(sender === null);
   }, [sender]);
 
+  // The native decoder couldn't start: MSE from here on. The receiver sends
+  // video to the muxer once the surface detaches; restartVideo asks for the
+  // keyframe a new MSE player starts at.
+  const onNativeStatus = (state: string, message: string) => {
+    log(`RosellaSurface: ${message}`);
+    if (state === 'failed' && useNative.current) {
+      warn('native video failed; using MSE', {message});
+      useNative.current = false;
+      nativeVideo.current = null;
+      setNativeOk(false);
+      Receiver.restartVideo();
+    }
+  };
+
   if (mirroring) {
     return (
       <View style={styles.root}>
-        <KeplerVideoSurfaceView
-          style={[styles.video, fit(videoSize[0], videoSize[1])]}
-          onSurfaceViewCreated={(handle: string) => {
-            surface.current = handle;
-            player.current?.setSurface(handle);
-          }}
-          onSurfaceViewDestroyed={() => {
-            surface.current = null;
-            player.current?.setSurface(null);
-          }}
-        />
+        {nativeOk ? (
+          <RosellaSurface
+            style={styles.fill}
+            onStatus={(e) => onNativeStatus(e.nativeEvent.state, e.nativeEvent.message)}
+          />
+        ) : (
+          <KeplerVideoSurfaceView
+            style={[styles.video, fit(videoSize[0], videoSize[1])]}
+            onSurfaceViewCreated={(handle: string) => {
+              surface.current = handle;
+              player.current?.setSurface(handle);
+            }}
+            onSurfaceViewDestroyed={() => {
+              surface.current = null;
+              player.current?.setSurface(null);
+            }}
+          />
+        )}
         {unlocked ? null : <Watermark />}
         <AvDelayOverlay
           active={mirroring}
@@ -294,17 +328,6 @@ export const App = () => {
       <View style={styles.root}>
         <Text style={styles.line}>Playing audio from</Text>
         <Text style={styles.name}>{sender}</Text>
-      </View>
-    );
-  }
-
-  if (SURFACE_TEST) {
-    return (
-      <View style={styles.root}>
-        <RosellaSurface
-          style={styles.fill}
-          onStatus={(e) => log(`RosellaSurface: ${e.nativeEvent.message}`)}
-        />
       </View>
     );
   }

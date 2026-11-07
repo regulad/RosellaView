@@ -25,7 +25,7 @@ add_library(RosellaView SHARED
   src/sentry.c
   src/sps.c
 )
-target_include_directories(RosellaView PRIVATE ${RV_THIRD_PARTY}/node-api-headers/include)
+target_include_directories(RosellaView PRIVATE ${RV_THIRD_PARTY}/node-api-headers/include include)
 target_compile_definitions(RosellaView PRIVATE _GNU_SOURCE)
 # Link with the C driver even though sentry-native brings C++: the Vega
 # toolchain defines its link rule (strip + debug file) for C only, and its C

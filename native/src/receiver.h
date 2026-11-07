@@ -49,7 +49,9 @@ void receiver_shift_audio(int ms);
  * and one is requested from the sender at once. */
 void receiver_video_restart(void);
 /* Asks the mirroring sender for an IDR frame ("forceKeyFrame" on the AirPlay
- * event channel, from our UxPlay fork). Returns 0 if the request was sent. */
+ * event channel, from our UxPlay fork). Returns 0 if the request was sent;
+ * not before the stream's first frame, which macOS answers with an empty
+ * codec packet that ends mirroring. */
 int receiver_request_keyframe(void);
 
 
@@ -58,6 +60,11 @@ int receiver_request_keyframe(void);
  * check that crash reports arrive. */
 int receiver_take_dev_flag(const char *name);
 void receiver_crash_for_test(void);
+
+/* Native video (rosella_video.h): the capture-to-screen latency the
+ * consumer aims for, in ms; and its state as a JSON string (caller frees). */
+void receiver_set_video_latency(int ms);
+char *receiver_native_video_json(void);
 
 /* Running counters since receiver_start(), as a JSON string (caller frees). */
 char *receiver_stats_json(void);

@@ -7,7 +7,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import {addBreadcrumb, captureMessage, logger, metrics, setContext, setTag} from '@sentry/core';
-import type {ReceiverEvent} from 'rosellaview-native';
+import type {NativeVideoState, ReceiverEvent} from 'rosellaview-native';
 
 // Sender details, attached to every log and metric while a sender is connected.
 let senderAttributes: Record<string, string> = {};
@@ -147,6 +147,9 @@ export type PlayerMetrics = {
   droppedFrames: number;
 };
 
+// The native pipeline's counters at the previous tick.
+let prevNative: NativeVideoState | null = null;
+
 // The video player's frame counters at the previous tick (null: new player).
 let prevFrames: {t: number; total: number; dropped: number} | null = null;
 
@@ -159,6 +162,7 @@ export function receiverStats(
   video: PlayerMetrics | null,
   audio: PlayerMetrics | null,
   av: {offsetMs: number; delayMs: number},
+  native: NativeVideoState | null = null,
 ): void {
   const now = Date.now();
   const cur = s as Record<string, number>;
@@ -247,6 +251,22 @@ export function receiverStats(
     } else {
       prevFrames = null;
     }
+  }
+  // The native pipeline (hardware decode, our own rendering): its latency,
+  // de-tile + upload cost, and pictures shown late or that failed to decode.
+  if (native && native.attached) {
+    const p = prevNative;
+    metrics.gauge('video.native.latency', native.latency_ms, {unit: 'millisecond', attributes});
+    metrics.gauge('video.native.upload', native.upload_ms, {unit: 'millisecond', attributes});
+    metrics.gauge('video.native.queued', native.queued, {attributes});
+    if (p) {
+      metrics.count('video.native.late', Math.max(0, native.late - p.late), {attributes});
+      metrics.count('video.native.errors', Math.max(0, native.errors - p.errors), {attributes});
+      metrics.count('video.native.decoder_starts', Math.max(0, native.starts - p.starts), {attributes});
+    }
+    prevNative = native;
+  } else {
+    prevNative = null;
   }
   if (audio) {
     metrics.gauge('audio.buffer_ahead', audio.aheadMs, {unit: 'millisecond', attributes});
