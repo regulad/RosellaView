@@ -85,21 +85,17 @@ export const App = () => {
       audio.current?.push(segment, kind === SegmentKind.Media);
     });
 
-    // A stalled video player is rebuilt and fed the current GOP again, but
-    // only if that GOP is cached: iOS may send a single keyframe per session,
-    // and a new player can't show anything before a keyframe, so otherwise
-    // the player is kept (a frozen picture beats a black one) and nudged.
+    // A stalled video player is replaced: the sender is asked for a keyframe,
+    // which starts a new player (see onVideo below). At most every 10 s.
     let lastRecovery = 0;
     const recoverVideo = (p: MirrorPlayer) => {
       const now = Date.now();
       warn('video player stalled', {player: p.stats(), receiver: Receiver.stats()});
-      if (now - lastRecovery >= 10000 && Receiver.canResyncVideo()) {
+      if (now - lastRecovery >= 10000) {
         lastRecovery = now;
         closePlayer();
-        log(`video resync -> ${Receiver.resyncVideo()}`);
-        return;
+        Receiver.restartVideo();
       }
-      p.kick();
     };
 
     Receiver.onVideo((kind, segment) => {

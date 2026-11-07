@@ -199,25 +199,18 @@ static napi_value js_set_watermark(napi_env env, napi_callback_info info) {
     return make_bool(env, on);
 }
 
-/* resyncVideo() → true if the current GOP was replayed */
-static napi_value js_resync_video(napi_env env, napi_callback_info info) {
+/* restartVideo(): after rebuilding a stalled player; the next keyframe (requested now) starts it */
+static napi_value js_restart_video(napi_env env, napi_callback_info info) {
     (void)info;
-    return make_bool(env, receiver_video_resync() == 0);
+    receiver_video_restart();
+    return make_bool(env, 1);
 }
 
-/* requestKeyframe() → true if a keyframe request went to the sender */
 static napi_value js_request_keyframe(napi_env env, napi_callback_info info) {
     (void)info;
     return make_bool(env, receiver_request_keyframe() == 0);
 }
 
-/* canResyncVideo() → true if resyncVideo() would replay a GOP */
-static napi_value js_can_resync_video(napi_env env, napi_callback_info info) {
-    (void)info;
-    return make_bool(env, receiver_video_can_resync());
-}
-
-/* setSentryEnvelopeListener(fn(kind, buffer) | null): receives native envelopes to post */
 static napi_value js_set_sentry_listener(napi_env env, napi_callback_info info) {
     int ok = replace_listener(env, info, &g_sentry, "RosellaViewSentry", deliver_video);
     rv_sentry_set_sink(sentry_sink);
@@ -269,8 +262,7 @@ static napi_value module_init(napi_env env, napi_value exports) {
         {"start", NULL, js_start, NULL, NULL, NULL, napi_default, NULL},
         {"stop", NULL, js_stop, NULL, NULL, NULL, napi_default, NULL},
         {"isRunning", NULL, js_is_running, NULL, NULL, NULL, napi_default, NULL},
-        {"resyncVideo", NULL, js_resync_video, NULL, NULL, NULL, napi_default, NULL},
-        {"canResyncVideo", NULL, js_can_resync_video, NULL, NULL, NULL, napi_default, NULL},
+        {"restartVideo", NULL, js_restart_video, NULL, NULL, NULL, napi_default, NULL},
         {"requestKeyframe", NULL, js_request_keyframe, NULL, NULL, NULL, napi_default, NULL},
         {"setSentryEnvelopeListener", NULL, js_set_sentry_listener, NULL, NULL, NULL, napi_default, NULL},
         {"sentryInit", NULL, js_sentry_init, NULL, NULL, NULL, napi_default, NULL},

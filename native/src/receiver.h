@@ -40,15 +40,13 @@ int receiver_is_running(void);
  * unlock is purchased. */
 void receiver_set_watermark(int on);
 
-/* Asks the video muxer to replay the current GOP for a rebuilt player
- * (see fmp4_resync). Returns 0 if a replay was sent. */
-int receiver_video_resync(void);
+/* For a rebuilt video player: the next keyframe starts a new init segment,
+ * and one is requested from the sender at once. */
+void receiver_video_restart(void);
 /* Asks the mirroring sender for an IDR frame ("forceKeyFrame" on the AirPlay
  * event channel, from our UxPlay fork). Returns 0 if the request was sent. */
 int receiver_request_keyframe(void);
 
-/* 1 if receiver_video_resync() would replay a GOP. */
-int receiver_video_can_resync(void);
 
 /* Development hooks: removes /scratch/dev-<name> and returns 1 if it existed
  * (create it from the component shell); and a deliberate native crash, to

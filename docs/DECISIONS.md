@@ -125,7 +125,8 @@ The laptop's `create_ap` AP now runs with `IEEE80211N=1`, started via `create_ap
 **What stays:**
 - `MirrorPlayer` removes played video more than 10 s behind the playhead every 5 s (hls.js's `backBufferLength`).
 - On `QuotaExceededError` it trims and retries the segment.
-- `fmp4.c` still flags a sync sample once a second, in `tfhd`. That's harmless, and right for players that honour it.
+- `fmp4.c` flags real IDRs as sync samples, in `tfhd`. The once-a-second flags were removed, since the player ignores them.
+- The GOP cache and replay for rebuilding a stalled player (`fmp4_resync`) were removed too. A stalled player is now closed, and the next requested IDR starts a new one (`Receiver.restartVideo`).
 - The trim only works because D7 makes the sender send real IDRs.
 
 **A/B result (2026-11-07, Mac, Big Buck Bunny):**
@@ -137,12 +138,7 @@ The laptop's `create_ap` AP now runs with `IEEE80211N=1`, started via `create_ap
   - RSS climbed to 310 MB without levelling off, with swap at 393 MB and 26–35 MB of RAM free
   - our CPU share crept from 11% to 15%
   - the owner saw regular micro-stutter. The sender's frame rate held at 24 fps, so the stutter was on the playback side: likely memory pressure, plus the player's big burst evictions.
-- **Decision: keep the trim** (matches Amazon's advice, VEGA.md). Investigate A's memory growth over an overnight run.
-
-**Original question (low priority):** is the trim still needed now that IDRs arrive every 10 s? With a single IDR the player never evicted. With regular IDRs, nobody has tested it with the trim off: every run with forced keyframes had it on.
-- **The test:** a Mac session with the trim disabled and keyframe requests on. At about 8 Mbit/s, `video.buffer_behind` reaches the 100 MB threshold in about 2 minutes, then either drops (the player evicts) or the picture freezes.
-- **Keep the trim even if it passes,** if the player's buffer grows as data arrives. Holding ~10 s (~10 MB) instead of 100 MB matters on a 1 GB device.
-- **Find out how it's allocated.** If the 100 MB is reserved up front (a fixed pool, which would be more usual for a real-time AV buffer), the trim saves no memory, and it would be extra code to keep only if the player can't evict by itself. Process RSS over a session, with the trim on and off, tells which.
+- **Decision: keep the trim, unconditionally** (the A/B switch is gone). It matches Amazon's advice (VEGA.md). Investigate A's memory growth over an overnight run.
 
 ## D7. Ask the sender for keyframes: forceKeyFrame on the event channel (2026-11-07)
 

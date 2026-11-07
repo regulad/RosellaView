@@ -16,8 +16,7 @@ interface NativeReceiver {
   start(name: string): boolean;
   stop(): boolean;
   isRunning(): boolean;
-  resyncVideo(): boolean;
-  canResyncVideo(): boolean;
+  restartVideo(): boolean;
   requestKeyframe(): boolean;
   setSentryEnvelopeListener(listener: ((kind: number, envelope: ArrayBuffer) => void) | null): boolean;
   sentryInit(dsn: string, release: string, dist: string, environment: string): boolean;
@@ -49,10 +48,8 @@ export const Receiver = {
   start: (name: string): boolean => native.start(name),
   stop: (): boolean => native.stop(),
   isRunning: (): boolean => native.isRunning(),
-  /** After rebuilding a stalled video player: replays the current GOP to it. */
-  resyncVideo: (): boolean => native.resyncVideo(),
-  /** Whether resyncVideo() has a GOP to replay (iOS may send only one keyframe per session). */
-  canResyncVideo: (): boolean => native.canResyncVideo(),
+  /** After closing a stalled video player: the next keyframe, requested at once, starts a new one. */
+  restartVideo: (): boolean => native.restartVideo(),
   /** Asks the sender for an IDR frame over the AirPlay event channel; true if sent. */
   requestKeyframe: (): boolean => native.requestKeyframe(),
   /**

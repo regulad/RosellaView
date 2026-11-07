@@ -392,7 +392,9 @@ static void cb_export_dacp(void *cls, const char *active_remote, const char *dac
     (void)dacp_id;
 }
 
-/* HLS "AirPlay video" is advertised as unsupported, so these stay inert. */
+/* HLS "AirPlay video" is advertised as unsupported, so these stay inert. They
+ * must still be set: libairplay calls them without NULL checks from HTTP
+ * handlers that a crafted request could reach. */
 static void cb_on_video_play(void *cls, const char *location, const float start_position) {
     (void)cls;
     (void)start_position;
@@ -637,13 +639,11 @@ void receiver_stop(void) {
 
 int receiver_is_running(void) { return g_raop != NULL; }
 
-int receiver_video_resync(void) {
-    int rc = -1;
+void receiver_video_restart(void) {
     pthread_mutex_lock(&g_mux_lock);
-    if (g_mux) rc = fmp4_resync(g_mux);
+    if (g_mux) fmp4_restart(g_mux);
     pthread_mutex_unlock(&g_mux_lock);
-    emit("{\"type\":\"video_resync\",\"replayed\":%s}", rc == 0 ? "true" : "false");
-    return rc;
+    receiver_request_keyframe();
 }
 
 int receiver_request_keyframe(void) {
@@ -652,14 +652,6 @@ int receiver_request_keyframe(void) {
     if (g_raop) rc = raop_request_keyframe(g_raop);
     pthread_mutex_unlock(&g_lock);
     return rc;
-}
-
-int receiver_video_can_resync(void) {
-    int ok = 0;
-    pthread_mutex_lock(&g_mux_lock);
-    if (g_mux) ok = fmp4_can_resync(g_mux);
-    pthread_mutex_unlock(&g_mux_lock);
-    return ok;
 }
 
 int receiver_take_dev_flag(const char *name) {

@@ -20,19 +20,9 @@
  * twice the declared frame duration, so declare a low rate and real
  * durations up to MAX_DURATION play as given (docs/DECISIONS.md D4). */
 #define VUI_FPS 10u
-/* Senders may send a single keyframe per session, and MSE only evicts
- * buffered video in whole runs from one sync sample to the next, so with real
- * keyframes alone the SourceBuffer fills (QuotaExceededError after ~130 s of a
- * Mac's 8 Mbit/s) and playback freezes. So a frame is flagged as a sync
- * sample at least this often. The flag only tells the player where it may
- * cut; the decoder, which has already decoded everything before it, carries
- * on unaffected. */
-#define RAP_INTERVAL TIMESCALE
 #define MIN_DURATION (TIMESCALE / 1000u)
 #define MAX_DURATION (2u * TIMESCALE / VUI_FPS - TIMESCALE / 100u) /* 190 ms */
 #define MAX_PS 256
-#define GOP_CACHE_MAX (16u * 1024u * 1024u) /* frames kept since the last keyframe, for resync */
-#define REPLAY_DURATION (TIMESCALE / 1000u) /* 1 ms: replayed frames decode, then live resumes */
 
 struct fmp4_muxer {
     fmp4_output out;
@@ -43,15 +33,9 @@ struct fmp4_muxer {
     int have_init;
     uint32_t sequence;
     uint64_t decode_time; /* in TIMESCALE units */
-    uint64_t last_rap_time; /* decode_time of the last fragment flagged as a sync sample */
     uint64_t last_ts_ns;
     int have_last_ts;
     uint64_t keyframes;
-    /* Samples since the last keyframe, as [u32 length][u8 sync][bytes]...;
-     * gop_valid is 0 until a keyframe arrives or after the cache overflows. */
-    uint8_t *gop;
-    size_t gop_len, gop_cap;
-    int gop_valid;
 };
 
 /* ---------- growable byte buffer ---------- */
@@ -287,10 +271,9 @@ static void write_fragment(buf_t *w, uint32_t sequence, uint64_t decode_time, co
     u32(w, 1);
     u32(w, duration);
     u32(w, (uint32_t)len);
-    /* Sync or not goes in the tfhd default too: Vega's player ignores trun's
-     * per-sample values (durations, and first-sample-flags as well), so with
-     * the flag only in trun it saw no sync samples at all, couldn't evict, and
-     * the SourceBuffer filled. */
+    /* Sync or not goes in the tfhd defaults, like duration and size: Vega's
+     * player ignores trun's per-sample values. (For eviction and remove() it
+     * goes by real IDRs in the bitstream anyway; DECISIONS.md D6.) */
     u32(w, sync ? 0x02000000u : 0x01010000u); /* depends on nothing : non-sync, depends on others */
     end(w, a);
     a = fullbox(w, "tfdt", 1, 0);
@@ -328,55 +311,12 @@ fmp4_muxer *fmp4_create(fmp4_output out, void *ctx) {
 
 void fmp4_destroy(fmp4_muxer *m) {
     if (!m) return;
-    free(m->gop);
     free(m);
-}
-
-static void gop_add(fmp4_muxer *m, const buf_t *sample, int sync) {
-    size_t need;
-    if (sync) {
-        m->gop_len = 0;
-        m->gop_valid = 1;
-    }
-    if (!m->gop_valid) return;
-    need = m->gop_len + 5 + sample->n;
-    if (need > GOP_CACHE_MAX) {
-        m->gop_valid = 0; /* too long a GOP to replay; resync waits for a keyframe */
-        m->gop_len = 0;
-        return;
-    }
-    if (need > m->gop_cap) {
-        size_t cap = m->gop_cap ? m->gop_cap : 256 * 1024;
-        while (cap < need) cap *= 2;
-        m->gop = realloc(m->gop, cap);
-        m->gop_cap = cap;
-    }
-    m->gop[m->gop_len++] = (uint8_t)(sample->n >> 24);
-    m->gop[m->gop_len++] = (uint8_t)(sample->n >> 16);
-    m->gop[m->gop_len++] = (uint8_t)(sample->n >> 8);
-    m->gop[m->gop_len++] = (uint8_t)sample->n;
-    m->gop[m->gop_len++] = (uint8_t)sync;
-    memcpy(m->gop + m->gop_len, sample->b, sample->n);
-    m->gop_len += sample->n;
 }
 
 uint64_t fmp4_keyframes(const fmp4_muxer *m) { return m->keyframes; }
 
-int fmp4_can_resync(const fmp4_muxer *m) { return m->have_init && m->gop_valid && m->gop_len > 0; }
-
-int fmp4_resync(fmp4_muxer *m) {
-    size_t pos = 0;
-    if (!fmp4_can_resync(m)) return -1;
-    emit_init(m);
-    while (pos + 5 <= m->gop_len) {
-        size_t len = (size_t)m->gop[pos] << 24 | (size_t)m->gop[pos + 1] << 16 | (size_t)m->gop[pos + 2] << 8 |
-                     m->gop[pos + 3];
-        buf_t sample = {m->gop + pos + 5, len, len};
-        emit_media(m, &sample, m->gop[pos + 4], REPLAY_DURATION);
-        pos += 5 + len;
-    }
-    return 0;
-}
+void fmp4_restart(fmp4_muxer *m) { m->have_init = 0; }
 
 size_t fmp4_get_sender_sps(const fmp4_muxer *m, uint8_t *out, size_t cap) {
     if (m->sps_len > cap) return 0;
@@ -396,8 +336,6 @@ void fmp4_reset(fmp4_muxer *m) {
     m->sps_len = m->pps_len = 0;
     m->have_init = 0;
     m->have_last_ts = 0;
-    m->gop_valid = 0;
-    m->gop_len = 0;
 }
 
 void fmp4_push_h264(fmp4_muxer *m, const uint8_t *au, size_t len, uint64_t ts_ns) {
@@ -455,13 +393,7 @@ void fmp4_push_h264(fmp4_muxer *m, const uint8_t *au, size_t len, uint64_t ts_ns
     m->have_last_ts = 1;
 
     if (sync) m->keyframes++;
-    gop_add(m, &sample, sync);
-    if (sync || m->decode_time - m->last_rap_time >= RAP_INTERVAL) {
-        m->last_rap_time = m->decode_time;
-        emit_media(m, &sample, 1, duration);
-    } else {
-        emit_media(m, &sample, 0, duration);
-    }
+    emit_media(m, &sample, sync, duration);
     free(sample.b);
 }
 

@@ -37,13 +37,8 @@ void fmp4_push_h264(fmp4_muxer *m, const uint8_t *au, size_t len, uint64_t ts_ns
 /* Keyframes seen since creation (diagnostics). */
 uint64_t fmp4_keyframes(const fmp4_muxer *m);
 
-/* Recovers a stalled player: re-emits the init segment, then every frame
- * since the last keyframe with 1 ms durations so a fresh decoder rebuilds its
- * references at once; live frames continue after them. Returns -1, changing
- * nothing, if no complete GOP is cached (fmp4_can_resync): iOS may send a
- * single keyframe per session, so a rebuilt player could never start. */
-int fmp4_can_resync(const fmp4_muxer *m);
-int fmp4_resync(fmp4_muxer *m);
+/* For a rebuilt player: the next keyframe starts a new init segment. */
+void fmp4_restart(fmp4_muxer *m);
 
 /* ---------- audio ---------- */
 
