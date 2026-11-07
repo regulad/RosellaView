@@ -16,7 +16,7 @@ const PLATE_W = 480;
 const PLATE_H = 110;
 const MARK = 84;
 const LOGO = require('./assets/logo_mark.png');
-const SPEED = 180; // px per second
+const SPEED = 90; // px per second
 
 export const Watermark = () => {
   const pos = useRef(new Animated.ValueXY({x: 60, y: 40})).current;
