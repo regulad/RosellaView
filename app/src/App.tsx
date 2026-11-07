@@ -10,10 +10,15 @@ import {KeplerVideoSurfaceView} from '@amazon-devices/react-native-w3cmedia';
 import {Receiver, ReceiverEvent, SegmentKind} from 'rosellaview-native';
 import {KeepAwake} from './KeepAwake';
 import {MirrorPlayer} from './MirrorPlayer';
+import {Watermark} from './Watermark';
 
 // The receiver advertises as "RosellaView <TAG>", TAG derived from the
 // device's persistent ID (native/src/receiver.c).
 const RECEIVER_BASE_NAME = 'RosellaView';
+// Until the in-app purchase lands (Phase 4), the watermark is always on:
+// the bouncing plate over mirrored video, and a spoken "Preview." every
+// 5 s of audio, mirroring included (mixed natively, native/src/audio.c).
+const WATERMARK = true;
 const FLAC_MIME = 'audio/mp4; codecs="flac"';
 const AAC_LC_MIME = 'audio/mp4; codecs="mp4a.40.2"';
 
@@ -151,6 +156,7 @@ export const App = () => {
       }
     });
 
+    Receiver.setWatermark(WATERMARK);
     log(`start(${RECEIVER_BASE_NAME}) -> ${Receiver.start(RECEIVER_BASE_NAME)}`);
     keepAwake.current.set(true);
     const stats = setInterval(() => {
@@ -191,6 +197,7 @@ export const App = () => {
             player.current?.setSurface(null);
           }}
         />
+        {WATERMARK ? <Watermark /> : null}
       </View>
     );
   }

@@ -5,7 +5,8 @@
  * (docs/DECISIONS.md D3), so:
  *   ct 4 (AAC-LC)            passes through untouched;
  *   ct 2 (ALAC), 8 (AAC-ELD) are decoded with libavcodec, then
- *   ct 1 (PCM) and decoded audio are wrapped in FLAC VERBATIM frames
+ *   ct 1 (PCM) and decoded audio get the spoken watermark mixed in (while
+ *   enabled) and are wrapped in FLAC VERBATIM frames
  *   (no compression, so the CPU cost is about that of a copy).
  * All AirPlay formats here are 44.1 kHz stereo.
  *
@@ -36,6 +37,9 @@ static const uint8_t AAC_LC_ASC[2] = {0x12, 0x10};
 static const uint8_t AAC_ELD_ASC[4] = {0xf8, 0xe8, 0x50, 0x00};
 #define AAC_LC_FRAME 1024
 
+#define PREVIEW_INTERVAL (5 * RATE) /* samples between spoken watermarks */
+#define PREVIEW_FIRST (2 * RATE)     /* the first comes this far into a stream */
+
 struct audio_pipeline {
     fmp4_audio *mux;
     unsigned ct;
@@ -46,6 +50,11 @@ struct audio_pipeline {
     size_t pcm_frames;
     uint64_t flac_frame;
     uint8_t *flac_buf;
+    int16_t *preview;          /* spoken watermark, mono */
+    size_t preview_len;
+    int preview_enabled;
+    size_t preview_pos;        /* < preview_len while the clip is playing */
+    uint64_t preview_wait;     /* samples until the next clip starts */
 };
 
 static void close_decoder(audio_pipeline *p) {
@@ -81,12 +90,56 @@ audio_pipeline *audio_create(fmp4_output out, void *ctx) {
 
 void audio_destroy(audio_pipeline *p) {
     if (!p) return;
+    free(p->preview);
     close_decoder(p);
     av_packet_free(&p->pkt);
     av_frame_free(&p->frame);
     fmp4_audio_destroy(p->mux);
     free(p->flac_buf);
     free(p);
+}
+
+void audio_set_preview_clip(audio_pipeline *p, const int16_t *clip, size_t samples) {
+    free(p->preview);
+    p->preview = NULL;
+    p->preview_len = 0;
+    if (!clip || !samples) return;
+    p->preview = malloc(samples * sizeof *clip);
+    if (!p->preview) return;
+    memcpy(p->preview, clip, samples * sizeof *clip);
+    p->preview_len = samples;
+    p->preview_pos = samples;
+}
+
+void audio_set_preview_enabled(audio_pipeline *p, int enabled) {
+    if (enabled && !p->preview_enabled) {
+        p->preview_wait = PREVIEW_FIRST;
+        p->preview_pos = p->preview_len;
+    }
+    p->preview_enabled = enabled;
+}
+
+/* Mixes the spoken watermark into interleaved s16 frames in place: the voice
+ * boosted ~3 dB (x1.4) over the programme ducked to 30%, clamped. */
+static void mix_preview(audio_pipeline *p, int16_t *pcm, size_t frames) {
+    if (!p->preview_enabled || !p->preview_len) return;
+    for (size_t i = 0; i < frames; i++) {
+        if (p->preview_pos >= p->preview_len) {
+            if (p->preview_wait > 0) {
+                p->preview_wait--;
+                continue;
+            }
+            p->preview_pos = 0;
+            p->preview_wait = PREVIEW_INTERVAL - p->preview_len;
+        }
+        {
+            int v = p->preview[p->preview_pos++] * 7 / 5;
+            for (int c = 0; c < CHANNELS; c++) {
+                int m = pcm[i * CHANNELS + c] * 3 / 10 + v;
+                pcm[i * CHANNELS + c] = (int16_t)(m > 32767 ? 32767 : m < -32768 ? -32768 : m);
+            }
+        }
+    }
 }
 
 void audio_reset(audio_pipeline *p) {
@@ -126,6 +179,7 @@ static void queue_pcm(audio_pipeline *p, const int16_t *pcm, size_t frames) {
         size_t take = FLAC_BLOCK - p->pcm_frames;
         if (take > frames) take = frames;
         memcpy(p->pcm + p->pcm_frames * CHANNELS, pcm, take * CHANNELS * sizeof *pcm);
+        mix_preview(p, p->pcm + p->pcm_frames * CHANNELS, take);
         p->pcm_frames += take;
         pcm += take * CHANNELS;
         frames -= take;

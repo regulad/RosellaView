@@ -26,6 +26,12 @@ int audio_set_format(audio_pipeline *p, unsigned ct);
 /* One decrypted AirPlay audio packet. */
 void audio_push(audio_pipeline *p, const uint8_t *data, size_t len);
 
+/* The spoken watermark: mono s16 44.1 kHz PCM (copied), mixed into decoded
+ * audio every PREVIEW_INTERVAL while enabled. AAC-LC passthrough (ct 4)
+ * can't carry it, since that path isn't decoded. */
+void audio_set_preview_clip(audio_pipeline *p, const int16_t *clip, size_t samples);
+void audio_set_preview_enabled(audio_pipeline *p, int enabled);
+
 /* Drops buffered samples (on flush, teardown or a new connection). */
 void audio_reset(audio_pipeline *p);
 

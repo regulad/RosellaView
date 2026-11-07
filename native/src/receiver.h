@@ -35,6 +35,11 @@ int receiver_start(const char *base_name);
 void receiver_stop(void);
 int receiver_is_running(void);
 
+/* While on (the default), audio carries a spoken "Preview." every 5 s of
+ * playback (mirroring and audio-only alike); the app turns it off once the
+ * unlock is purchased. */
+void receiver_set_watermark(int on);
+
 /* Asks the video muxer to replay the current GOP for a rebuilt player
  * (see fmp4_resync). Returns 0 if a replay was sent. */
 int receiver_video_resync(void);

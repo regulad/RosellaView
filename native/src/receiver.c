@@ -34,6 +34,10 @@ static fmp4_muxer *g_mux;
 static receiver_video_sink g_audio_sink;
 static pthread_mutex_t g_audio_lock = PTHREAD_MUTEX_INITIALIZER;
 static audio_pipeline *g_audio;
+static int g_watermark = 1;   /* until the unlock is purchased (JS decides) */
+
+/* Spoken watermark, shipped as an app asset (scripts/make-preview-clip.sh). */
+#define PREVIEW_CLIP "/pkg/assets/raw/preview.pcm"
 
 static void emit(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 static pthread_mutex_t g_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -56,6 +60,40 @@ static void audio_output(void *ctx, enum fmp4_kind kind, uint8_t *data, size_t l
     } else {
         free(data);
     }
+}
+
+/* Under g_audio_lock. The spoken watermark is mixed into every audio stream,
+ * mirroring included; it is only heard while the sender is actually sending
+ * audio (iOS stops while nothing plays), and its 5 s count only advances
+ * with incoming samples. */
+static void update_preview_locked(void) {
+    if (g_audio) audio_set_preview_enabled(g_audio, g_watermark);
+}
+
+static void load_preview_clip_locked(void) {
+    FILE *f = fopen(PREVIEW_CLIP, "rb");
+    int16_t *clip;
+    long n;
+    if (!f) {
+        emit("{\"type\":\"error\",\"where\":\"preview_clip\",\"path\":\"%s\"}", PREVIEW_CLIP);
+        return;
+    }
+    fseek(f, 0, SEEK_END);
+    n = ftell(f);
+    rewind(f);
+    clip = n > 0 ? malloc((size_t)n) : NULL;
+    if (clip && fread(clip, 1, (size_t)n, f) == (size_t)n) {
+        audio_set_preview_clip(g_audio, clip, (size_t)n / sizeof *clip);
+    }
+    free(clip);
+    fclose(f);
+}
+
+void receiver_set_watermark(int on) {
+    pthread_mutex_lock(&g_audio_lock);
+    g_watermark = on != 0;
+    update_preview_locked();
+    pthread_mutex_unlock(&g_audio_lock);
 }
 
 static void audio_reset_locked(void) {
@@ -293,7 +331,11 @@ static void cb_audio_get_format(void *cls, unsigned char *ct, unsigned short *sp
     (void)cls;
     atomic_store(&g_audio_ct, *ct);
     pthread_mutex_lock(&g_audio_lock);
-    if (g_audio) rc = audio_set_format(g_audio, *ct);
+    if (g_audio) {
+        rc = audio_set_format(g_audio, *ct);
+        audio_set_preview_enabled(g_audio, 0); /* restart the countdown for the new stream */
+        update_preview_locked();
+    }
     pthread_mutex_unlock(&g_audio_lock);
     if (rc != 0) emit("{\"type\":\"error\",\"where\":\"audio_set_format\",\"ct\":%u}", *ct);
     emit("{\"type\":\"audio_format\",\"ct\":%u,\"spf\":%u,\"using_screen\":%s,\"is_media\":%s,\"format\":\"0x%" PRIx64 "\"}",
@@ -428,7 +470,10 @@ int receiver_start(const char *base_name) {
     fmp4_reset(g_mux);
     pthread_mutex_unlock(&g_mux_lock);
     pthread_mutex_lock(&g_audio_lock);
-    if (!g_audio) g_audio = audio_create(audio_output, NULL);
+    if (!g_audio) {
+        g_audio = audio_create(audio_output, NULL);
+        load_preview_clip_locked();
+    }
     pthread_mutex_unlock(&g_audio_lock);
 
     get_hw_addr(hw);

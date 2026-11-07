@@ -17,6 +17,7 @@ interface NativeReceiver {
   stop(): boolean;
   isRunning(): boolean;
   resyncVideo(): boolean;
+  setWatermark(on: boolean): boolean;
   getStats(): string;
 }
 
@@ -44,5 +45,7 @@ export const Receiver = {
   isRunning: (): boolean => native.isRunning(),
   /** After rebuilding a stalled video player: replays the current GOP to it. */
   resyncVideo: (): boolean => native.resyncVideo(),
+  /** Audio carries a spoken "Preview." every 5 s while on (the default). */
+  setWatermark: (on: boolean): boolean => native.setWatermark(on),
   stats: (): Record<string, unknown> => JSON.parse(native.getStats()) as Record<string, unknown>,
 };

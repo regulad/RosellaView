@@ -18,6 +18,7 @@
 #define NAPI_VERSION 8
 #include <node_api.h>
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -179,6 +180,17 @@ static napi_value js_stop(napi_env env, napi_callback_info info) {
     return make_bool(env, 1);
 }
 
+/* setWatermark(on) */
+static napi_value js_set_watermark(napi_env env, napi_callback_info info) {
+    size_t argc = 1;
+    napi_value argv[1];
+    bool on = true;
+    napi_get_cb_info(env, info, &argc, argv, NULL, NULL);
+    if (argc >= 1) napi_get_value_bool(env, argv[0], &on);
+    receiver_set_watermark(on);
+    return make_bool(env, on);
+}
+
 /* resyncVideo() → true if the current GOP was replayed */
 static napi_value js_resync_video(napi_env env, napi_callback_info info) {
     (void)info;
@@ -208,6 +220,7 @@ static napi_value module_init(napi_env env, napi_value exports) {
         {"stop", NULL, js_stop, NULL, NULL, NULL, napi_default, NULL},
         {"isRunning", NULL, js_is_running, NULL, NULL, NULL, napi_default, NULL},
         {"resyncVideo", NULL, js_resync_video, NULL, NULL, NULL, napi_default, NULL},
+        {"setWatermark", NULL, js_set_watermark, NULL, NULL, NULL, napi_default, NULL},
         {"getStats", NULL, js_get_stats, NULL, NULL, NULL, napi_default, NULL},
     };
     napi_define_properties(env, exports, sizeof props / sizeof props[0], props);
