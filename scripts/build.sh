@@ -38,10 +38,26 @@ fi
 RELEASE="rosellaview@$VERSION+$GIT"
 DIST=vega
 
-# Stamp the release into the bundle; restore the committed default afterwards.
+# Stamp the release into the bundle, and (development builds only) let the
+# app reach the IAP App Tester; restore the committed files afterwards.
 BUILD_INFO="$APP/src/buildInfo.ts"
+MANIFEST="$APP/manifest.toml"
 cp "$BUILD_INFO" "$BUILD_INFO.orig"
-trap 'mv "$BUILD_INFO.orig" "$BUILD_INFO"' EXIT
+cp "$MANIFEST" "$MANIFEST.orig"
+trap 'mv "$BUILD_INFO.orig" "$BUILD_INFO"; mv "$MANIFEST.orig" "$MANIFEST"' EXIT
+if [ "$ENVIRONMENT" = development ]; then
+  # Sandbox purchases (ProjectRosella/VEGA.md, In-app purchases). Inert
+  # without App Tester installed, but kept out of production builds.
+  cat >> "$MANIFEST" <<'TESTER'
+
+# IAP App Tester (sandbox purchases): development builds only (scripts/build.sh).
+[[wants.service]]
+id = "com.amazon.iap.tester.service"
+
+[[wants.module]]
+id = "/com.amazonappstore.iap.tester@IIAPTesterUI"
+TESTER
+fi
 cat > "$BUILD_INFO" <<EOF
 // Written by scripts/build.sh before each build; these are the values for an
 // ad-hoc \`npm run build\`.

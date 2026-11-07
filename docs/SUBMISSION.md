@@ -5,7 +5,7 @@ The owner does the submission; nothing here is automated. Listing wording rules 
 ## Before uploading
 
 - [x] Development hooks removed (crash and error tests). The MSE video path stays as Compatibility Mode, which only the viewer can switch on.
-- [x] App Tester removed from `app/manifest.toml`. In-app purchases can't be tested against App Tester with this manifest. To test them again, put back the `com.amazon.iap.tester.service` service and `/com.amazonappstore.iap.tester@IIAPTesterUI` module wants (see git history).
+- [x] App Tester is out of the committed manifest. `scripts/build.sh` adds its two wants to development builds only, so sandbox purchases keep working there; `scripts/build.sh production` leaves them out.
 - [x] In-app About & privacy screen: AGPL §5(d) notices, third-party notices, trademark notice, privacy disclosure.
 - [x] Source published at https://github.com/regulad/RosellaView (`SOURCE_URL` in `app/src/About.tsx`); the UxPlay fork is at https://github.com/regulad/UxPlay (branch `rosella`). Push before each release, so the shipped commit is public.
 - [x] Privacy policy hosted at https://regulad.github.io/RosellaView/ (GitHub Pages, branch `gh-pages`, `index.md`). It's a copy of `docs/PRIVACY.md`: update both together. Enter the URL in the portal.
