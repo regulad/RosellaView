@@ -273,7 +273,15 @@ export class MirrorPlayer {
     }
   }
 
-  metrics(): {appended: number; aheadMs: number; behindMs: number; queue: number; readyState: number} | null {
+  metrics(): {
+    appended: number;
+    aheadMs: number;
+    behindMs: number;
+    queue: number;
+    readyState: number;
+    totalFrames: number;
+    droppedFrames: number;
+  } | null {
     const vp = this.player;
     if (!vp) {
       return null;
@@ -287,6 +295,19 @@ export class MirrorPlayer {
       behindMs: Math.round((vp.currentTime - start) * 1000),
       queue: this.queue.length,
       readyState: vp.readyState,
+      ...this.playbackQuality(),
+    };
+  }
+
+  /** The player's decoded and dropped frame counts (video only; -1 if unavailable). */
+  private playbackQuality(): {totalFrames: number; droppedFrames: number} {
+    // Vega's object names its fields with a trailing underscore.
+    type Quality = Record<string, number | undefined>;
+    const vp = this.player as unknown as {getVideoPlaybackQuality?: () => Quality} | null;
+    const q = this.isVideo ? vp?.getVideoPlaybackQuality?.() : undefined;
+    return {
+      totalFrames: q?.totalVideoFrames ?? q?.totalVideoFrames_ ?? -1,
+      droppedFrames: q?.droppedVideoFrames ?? q?.droppedVideoFrames_ ?? -1,
     };
   }
 

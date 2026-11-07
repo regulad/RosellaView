@@ -115,7 +115,18 @@ function flatten(data: Record<string, unknown>): Record<string, string | number 
   return out;
 }
 
-export type PlayerMetrics = {appended: number; aheadMs: number; behindMs: number; queue: number; readyState: number};
+export type PlayerMetrics = {
+  appended: number;
+  aheadMs: number;
+  behindMs: number;
+  queue: number;
+  readyState: number;
+  totalFrames: number;
+  droppedFrames: number;
+};
+
+// The video player's frame counters at the previous tick (null: new player).
+let prevFrames: {t: number; total: number; dropped: number} | null = null;
 
 let previous: {t: number; s: Record<string, number>} | null = null;
 let prevCpu: {t: number; ms: number} | null = null;
@@ -195,6 +206,18 @@ export function receiverStats(
     metrics.gauge('video.queue', video.queue, {attributes});
     // Already-played video still buffered; MirrorPlayer trims it to ~10-15 s.
     metrics.gauge('video.buffer_behind', video.behindMs, {unit: 'millisecond', attributes});
+    // What the TV actually presents, next to what the sender sends (video.fps).
+    if (video.totalFrames >= 0) {
+      const p = prevFrames;
+      if (p && now > p.t && video.totalFrames >= p.total) {
+        const dt = (now - p.t) / 1000;
+        metrics.gauge('video.fps_shown', (video.totalFrames - p.total - (video.droppedFrames - p.dropped)) / dt, {attributes});
+        metrics.count('video.dropped', Math.max(0, video.droppedFrames - p.dropped), {attributes});
+      }
+      prevFrames = {t: now, total: video.totalFrames, dropped: video.droppedFrames};
+    } else {
+      prevFrames = null;
+    }
   }
   if (audio) {
     metrics.gauge('audio.buffer_ahead', audio.aheadMs, {unit: 'millisecond', attributes});
@@ -210,4 +233,5 @@ export function receiverStats(
 /** Call when the sender disconnects, so rates restart cleanly. */
 export function resetStats(): void {
   previous = null;
+  prevFrames = null;
 }
