@@ -8,6 +8,7 @@
  */
 #include "receiver.h"
 
+#include <errno.h>
 #include <inttypes.h>
 #include <pthread.h>
 #include <stdarg.h>
@@ -17,6 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <dirent.h>
+#include <sys/mman.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/sysinfo.h>
@@ -469,6 +471,33 @@ static void set_features(dnssd_t *d) {
     for (int i = 32; i < 62; i++) dnssd_set_airplay_features(d, i, 0);
 }
 
+/* Whether this process may lock memory into RAM (mlock/mlockall): reports the
+ * RLIMIT_MEMLOCK limits and whether locking one page works. Locks nothing. */
+static void report_memlock(void) {
+    struct rlimit rl;
+    long page = sysconf(_SC_PAGESIZE);
+    void *probe = NULL;
+    int rc = -1, err = 0;
+    char cur[32], max[32];
+    if (getrlimit(RLIMIT_MEMLOCK, &rl) != 0) {
+        emit("{\"type\":\"memlock\",\"error\":%d}", errno);
+        return;
+    }
+    if (rl.rlim_cur == RLIM_INFINITY) snprintf(cur, sizeof cur, "\"unlimited\"");
+    else snprintf(cur, sizeof cur, "%llu", (unsigned long long)rl.rlim_cur);
+    if (rl.rlim_max == RLIM_INFINITY) snprintf(max, sizeof max, "\"unlimited\"");
+    else snprintf(max, sizeof max, "%llu", (unsigned long long)rl.rlim_max);
+    if (posix_memalign(&probe, (size_t)page, (size_t)page) == 0) {
+        rc = mlock(probe, (size_t)page);
+        err = rc ? errno : 0;
+        if (rc == 0) munlock(probe, (size_t)page);
+        free(probe);
+    }
+    emit("{\"type\":\"memlock\",\"rlimit_cur\":%s,\"rlimit_max\":%s,\"page_size\":%ld,"
+         "\"mlock_page\":%s,\"mlock_errno\":%d}",
+         cur, max, page, rc == 0 ? "true" : "false", err);
+}
+
 int receiver_start(const char *base_name) {
     raop_callbacks_t cbs;
     unsigned char hw[6];
@@ -591,6 +620,7 @@ int receiver_start(const char *base_name) {
         char *n = json_escape(name);
         emit("{\"type\":\"started\",\"name\":\"%s\",\"port\":%u,\"deviceid\":\"%s\",\"features\":\"0x%" PRIx64 "\"}",
              n, port, device_id, dnssd_get_airplay_features(g_dnssd));
+        report_memlock();
         free(n);
     }
     pthread_mutex_unlock(&g_lock);
@@ -735,6 +765,12 @@ static void system_stats(char *out, size_t len) {
     put_num(&p, &left, "cpu_freq_khz", (double)freq);
     put_num(&p, &left, "cpu_freq_max_khz", (double)freq_max);
     put_num(&p, &left, "threads", (double)proc_kb("/proc/self/status", "Threads"));
+    /* Virtual size against RSS shows whether buffers are reserved up front and
+     * faulted in, or allocated as they grow; VmLck and VmSwap what's pinned
+     * and what's been swapped out. */
+    put_num(&p, &left, "vm_size_kb", (double)proc_kb("/proc/self/status", "VmSize"));
+    put_num(&p, &left, "vm_locked_kb", (double)proc_kb("/proc/self/status", "VmLck"));
+    put_num(&p, &left, "vm_swap_kb", (double)proc_kb("/proc/self/status", "VmSwap"));
     if ((d = opendir("/proc/self/fd")) != NULL) {
         fds = -2; /* . and .. */
         while (readdir(d)) fds++;

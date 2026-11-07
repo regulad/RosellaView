@@ -18,6 +18,11 @@ export function log(msg: string): void {
   logger.info(msg, senderAttributes);
 }
 
+/** Counts an occurrence (a Sentry counter metric with the sender attributes). */
+export function countEvent(name: string): void {
+  metrics.count(name, 1, {attributes: senderAttributes});
+}
+
 /** Something wrong but recoverable, worth an issue in Sentry. */
 export function warn(msg: string, extra?: Record<string, unknown>): void {
   console.warn(`ROSELLAVIEW ${msg}`);
@@ -169,6 +174,15 @@ export function receiverStats(s: Record<string, unknown>, video: PlayerMetrics |
   }
   if (has('fds')) {
     gauge('process.fds', cur.fds);
+  }
+  if (has('vm_size_kb')) {
+    gauge('process.vm_size', mb('vm_size_kb'), 'megabyte');
+  }
+  if (has('vm_locked_kb')) {
+    gauge('process.vm_locked', mb('vm_locked_kb'), 'megabyte');
+  }
+  if (has('vm_swap_kb')) {
+    gauge('process.vm_swap', mb('vm_swap_kb'), 'megabyte');
   }
   metrics.gauge('video.keyframes', cur.keyframes, {attributes});
   if (video) {

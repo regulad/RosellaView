@@ -10,7 +10,8 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import {AudioPlayer, MediaSource, VideoPlayer} from '@amazon-devices/react-native-w3cmedia';
-import {warn} from './Telemetry';
+import {Receiver} from 'rosellaview-native';
+import {countEvent, warn} from './Telemetry';
 
 // The decoder reconfigures from each init segment's avcC, so a generic
 // High-profile type is enough to create the SourceBuffer.
@@ -30,6 +31,15 @@ const STALL_MS = 2500;
 // sync sample, which fmp4.c flags at least once a second (DECISIONS.md D6).
 const BACK_BUFFER_S = 10;
 const TRIM_EVERY_MS = 5000;
+
+// Audio latency cap: if the audio player falls more than AUDIO_MAX_AHEAD_MS
+// behind the newest audio for AUDIO_LATE_CHECKS checks in a row (1 s apart),
+// its playhead jumps to AUDIO_TARGET_AHEAD_MS behind the live edge. Sequence
+// mode never catches up by itself: overnight, one 2.6 s hiccup left audio
+// that far behind the picture for the rest of the session.
+const AUDIO_MAX_AHEAD_MS = 1200;
+const AUDIO_TARGET_AHEAD_MS = 500;
+const AUDIO_LATE_CHECKS = 3;
 const STALL_MIN_FRAMES = 30;
 
 export type StreamKind = {kind: 'video'} | {kind: 'audio'; mime: string};
@@ -51,6 +61,13 @@ export class MirrorPlayer {
   private appendedAtMove = 0;
   private lastTrim = 0;
   private trims = 0;
+  private lastTrimRange = '';
+  private lastUpdateEnd = 0;
+  private lateChecks = 0;
+  private latencyFixes = 0;
+  // Development: `touch /scratch/dev-audio-latency-test` makes the next audio
+  // player cap latency at 300 ms, so the jump can be checked on demand.
+  private maxAheadMs = AUDIO_MAX_AHEAD_MS;
 
   constructor(
     private readonly log: Log,
@@ -91,6 +108,11 @@ export class MirrorPlayer {
     this.log(`${this.stream.kind} player open`);
     if (this.onStall) {
       this.watchdog = setInterval(() => this.checkStall(), 1000);
+    } else if (!this.isVideo) {
+      if (Receiver.takeDevFlag('audio-latency-test')) {
+        this.maxAheadMs = 300;
+      }
+      this.watchdog = setInterval(() => this.checkLatency(), 1000);
     }
     this.pump();
   }
@@ -161,6 +183,7 @@ export class MirrorPlayer {
     try {
       sb.remove(b.start(0), end);
       this.trims++;
+      this.lastTrimRange = `${b.start(0).toFixed(1)}-${end.toFixed(1)}`;
       return true;
     } catch (e) {
       warn(`${this.stream.kind} remove threw`, {error: String(e)});
@@ -200,6 +223,7 @@ export class MirrorPlayer {
 
   private onUpdateEnd(): void {
     this.busy = false;
+    this.lastUpdateEnd = Date.now();
     const vp = this.player;
     if (!vp || this.closed) {
       return;
@@ -254,6 +278,28 @@ export class MirrorPlayer {
     };
   }
 
+  /** Keeps audio latency near AUDIO_TARGET_AHEAD_MS (see AUDIO_MAX_AHEAD_MS). */
+  private checkLatency(): void {
+    const vp = this.player;
+    if (!vp || !this.playing || this.closed) {
+      return;
+    }
+    const b = vp.buffered;
+    if (!b || !b.length) {
+      return;
+    }
+    const end = b.end(b.length - 1);
+    const aheadMs = (end - vp.currentTime) * 1000;
+    this.lateChecks = aheadMs > this.maxAheadMs ? this.lateChecks + 1 : 0;
+    if (this.lateChecks >= AUDIO_LATE_CHECKS) {
+      this.lateChecks = 0;
+      this.latencyFixes++;
+      vp.currentTime = end - AUDIO_TARGET_AHEAD_MS / 1000;
+      this.log(`${this.stream.kind} latency ${aheadMs.toFixed(0)}ms: jumped to ${AUDIO_TARGET_AHEAD_MS}ms behind live (#${this.latencyFixes})`);
+      countEvent(`${this.stream.kind}.latency_corrections`);
+    }
+  }
+
   stats(): string {
     const vp = this.player;
     if (!vp) {
@@ -261,6 +307,12 @@ export class MirrorPlayer {
     }
     const b = vp.buffered;
     const end = b && b.length ? b.end(b.length - 1) : -1;
-    return `appended=${this.appended} cur=${vp.currentTime.toFixed(2)} ahead=${((end - vp.currentTime) * 1000).toFixed(0)}ms queue=${this.queue.length} rs=${vp.readyState}`;
+    const now = Date.now();
+    return (
+      `appended=${this.appended} cur=${vp.currentTime.toFixed(2)} ahead=${((end - vp.currentTime) * 1000).toFixed(0)}ms ` +
+      `queue=${this.queue.length} rs=${vp.readyState} ranges=${b ? b.length : 0} busy=${this.busy} ` +
+      `lastUpdateEnd=${this.lastUpdateEnd ? now - this.lastUpdateEnd : -1}ms ` +
+      `lastTrim=${this.lastTrim ? now - this.lastTrim : -1}ms(${this.lastTrimRange}) trims=${this.trims}`
+    );
   }
 }

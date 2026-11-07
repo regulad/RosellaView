@@ -48,3 +48,4 @@ Its uploads need `sentry-cli login`; the token needs `project:write`, `org:read`
   - sessions, for release health
 - **Native** (`native/src/sentry.c`) uses sentry-native with the inproc backend. Crashes go into `/data/rosellaview/sentry` and are sent on the next launch, through JS (`Receiver.onSentryEnvelope`); there's no native HTTP. On armv7, an `on_crash` hook rebuilds the stack from pc, lr and a stack scan, because sentry-native's unwinder gets nothing usable there.
 - **Development hooks** (remove before submission): from the component shell, `touch /scratch/dev-js-error` or `/scratch/dev-native-crash`, then relaunch. The app throws, or crashes natively, 5 s after start, to test the whole path.
+  - `touch /scratch/dev-audio-latency-test`: the next audio player caps latency at 300 ms instead of 1200, so its catch-up jump fires right away.
