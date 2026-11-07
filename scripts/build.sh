@@ -28,7 +28,9 @@ SENTRY_CLI="npx -y @sentry/cli@3.8.2"
 
 VERSION=$(node -p "require('$APP/package.json').version")
 GIT=$(git -C "$ROOT" rev-parse --short=12 HEAD)
-if ! git -C "$ROOT" diff --quiet HEAD -- app native; then
+# app/package-lock.json changes on every build (the local module tarball's
+# checksum), so it doesn't count.
+if ! git -C "$ROOT" diff --quiet HEAD -- app native ':!app/package-lock.json'; then
   # Uncommitted changes: make each build's release unique, so its source map
   # can't be confused with another build's.
   GIT="$GIT-dirty.$(date +%s)"

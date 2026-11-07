@@ -287,17 +287,19 @@ static void write_fragment(buf_t *w, uint32_t sequence, uint64_t decode_time, co
     u32(w, 1);
     u32(w, duration);
     u32(w, (uint32_t)len);
-    u32(w, 0x01010000u); /* default: non-sync, depends on others */
+    /* Sync or not goes in the tfhd default too: Vega's player ignores trun's
+     * per-sample values (durations, and first-sample-flags as well), so with
+     * the flag only in trun it saw no sync samples at all, couldn't evict, and
+     * the SourceBuffer filled. */
+    u32(w, sync ? 0x02000000u : 0x01010000u); /* depends on nothing : non-sync, depends on others */
     end(w, a);
     a = fullbox(w, "tfdt", 1, 0);
     u64(w, decode_time);
     end(w, a);
-    /* data-offset, plus first-sample-flags on sync samples */
-    trun = fullbox(w, "trun", 0, sync ? (0x000001 | 0x000004) : 0x000001);
+    trun = fullbox(w, "trun", 0, 0x000001); /* data-offset */
     u32(w, 1);
     data_offset_at = w->n;
     u32(w, 0);
-    if (sync) u32(w, 0x02000000u); /* depends on nothing */
     end(w, trun);
     end(w, traf);
     end(w, moof);
