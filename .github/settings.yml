@@ -1,0 +1,30 @@
+# Repository metadata, declarative.
+#
+# Consumed by the Probot "Settings" GitHub App (https://github.com/apps/settings,
+# source at repository-settings/app), which watches the default branch and PATCHes
+# the repository's GitHub-side settings to match. Nothing in CI reads this file.
+# Unless the app is installed on this repository, the file is inert.
+#
+# Two traps worth knowing before editing:
+#   - `topics` is a COMMA-SEPARATED STRING, not a YAML list. The app does
+#     `topics.split(/\s*,\s*/)`, so a `- item` block list throws.
+#   - An unrecognised key can make the app reject the whole file. Only keys the
+#     app documents (docs/plugins/repository.md) belong here.
+#
+# Anything omitted is left alone, including `private` and the security flags.
+
+repository:
+  name: "RosellaView"
+
+  description: "Screen mirroring receiver for iPhone, iPad and Mac on Fire TV (Vega OS), based on UxPlay"
+
+  default_branch: "master"
+
+  # ISSUES ONLY. Everything else this app can switch off is off.
+  has_issues: true
+  has_projects: false
+  has_wiki: false
+  has_downloads: false
+
+  # Max 20, lowercase/digits/hyphens, <=35 chars each (GitHub's rules).
+  topics: "airplay, airplay-receiver, screen-mirroring, uxplay, fire-tv, firetv, vega-os, react-native, node-api, c, cmake"

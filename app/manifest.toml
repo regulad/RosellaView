@@ -1,0 +1,55 @@
+schema-version = 1
+
+[package]
+title = "RosellaView"
+version = "0.1.0"
+# Pass an increasing --build-number for every Appstore upload.
+build-number = 1
+id = "xyz.regulad.rosellaview"
+
+[os.version]
+min = "2.0"
+target = "2.0"
+
+[needs]
+[[needs.privilege]]
+id = "com.amazon.network.privilege.net-info"
+
+[wants]
+[[wants.service]]
+id = "com.amazon.network.service"
+
+# Media services the W3C media player binds to (docs/DECISIONS.md D1).
+[[wants.service]]
+id = "com.amazon.mediametrics.service"
+
+[[wants.service]]
+id = "com.amazon.mediabuffer.service"
+
+[[wants.service]]
+id = "com.amazon.mediatransform.service"
+
+[[wants.service]]
+id = "com.amazon.audio.stream"
+
+[[wants.service]]
+id = "com.amazon.audio.control"
+
+[[wants.service]]
+id = "com.amazon.media.server"
+
+[[wants.service]]
+id = "com.amazon.media.playersession.service"
+
+[[wants.privilege]]
+id = "com.amazon.devconf.privilege.accessibility"
+
+[[wants.module]]
+id = "/com.amazon.kepler.net.net_manager@INetManager"
+
+[components]
+[[components.interactive]]
+id = "xyz.regulad.rosellaview.main"
+runtime-module = "/com.amazon.kepler.runtime.react_native_kepler_4@IReactNativeKepler_0"
+launch-type = "singleton"
+categories = ["com.amazon.category.main"]
