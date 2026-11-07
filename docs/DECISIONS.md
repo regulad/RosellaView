@@ -187,3 +187,28 @@ The laptop's `create_ap` AP now runs with `IEEE80211N=1`, started via `create_ap
 - In audio-only mode (no video player) the latency cap in `MirrorPlayer` keeps audio live instead, by dropping samples down to about 0.5 s.
 - AAC-LC passthrough (ct 4) can't be shifted, since it isn't decoded. No sender has used it so far.
 - Metrics: `av.offset` (distance from target; negative means audio late), `av.delay` and `av.corrections`.
+
+## D9. Known limitation: full-range video is clipped by the MSE path (2026-11-07)
+
+**Finding:**
+- iOS mirrors **full-range** video: BT.709 primaries and matrix, sRGB transfer (13), and `video_full_range_flag` 1, in the SPS. macOS sends limited range.
+- Vega's W3C MSE video path decodes full range as if it were limited, so detail at the ends is lost. On a 0–255 grey step chart, 0–16 merged into one black and 235–255 into one white. In practice the near-white greys of iPadOS/iOS UI merge into white backgrounds; seen on the Files screen.
+- It doesn't depend on the TV's HDMI format: Settings offers RGB (default) or YCbCr, with no range setting, and both looked the same.
+
+**Tried, all clipped** (the chart through RosellaView's muxer, played on the TV):
+- **A:** full range in the SPS only (as iOS sends it, and as RosellaView passes it through)
+- **B:** A plus an MP4 `colr` nclx box declaring full range
+- **C:** the full-range flag with no colour description
+- **D:** full range, all-BT.709 description, plus `colr`
+- **E:** as D, without `colr`
+
+**Decision:**
+- Ship with the limitation and document it (COMPATIBILITY.md).
+- The muxer still writes the `colr` box from the sender's SPS: it's correct per ISO BMFF, and a future Vega update may honour it.
+- `video_init` reports the sender's range and colour codes, and the `video.range` tag marks affected sessions.
+
+**Ways out, none cheap:**
+- **Remapping the pixels** (full → limited) needs a decode and re-encode of every frame. That's beyond this CPU at 1080p.
+- **iOS** has no AirPlay setting to send limited range.
+- **A native video surface** with our own rendering, or a player that honours the flag, could fix it. That's next to investigate.
+- **Ask Amazon** whether there's a supported way to signal full range to the MSE player.

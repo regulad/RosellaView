@@ -22,4 +22,9 @@ size_t sps_set_timing(const uint8_t *sps, size_t len, unsigned fps, uint8_t *out
  * success, -1 if it couldn't be parsed. */
 int sps_get_size(const uint8_t *sps, size_t len, unsigned *width, unsigned *height);
 
+/* The VUI's colour description (ITU-T H.273 codes; 2 = unspecified) and
+ * full-range flag. Returns 0, or -1 if the SPS has no video signal type. */
+int sps_get_colour(const uint8_t *sps, size_t len, unsigned *primaries, unsigned *transfer, unsigned *matrix,
+                   unsigned *full_range);
+
 #endif

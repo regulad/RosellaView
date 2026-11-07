@@ -129,8 +129,15 @@ static void mux_output(void *ctx, enum fmp4_kind kind, uint8_t *data, size_t len
         for (size_t i = 0; i < n; i++) sprintf(hex + 2 * i, "%02x", sps[i]);
         hex[2 * n] = 0;
         sps_get_size(sps, n, &w, &h);
-        emit("{\"type\":\"video_init\",\"bytes\":%zu,\"width\":%u,\"height\":%u,\"sender_sps\":\"%s\"}", len, w, h,
-             hex);
+        {
+            /* The sender's colour signalling: full range is clipped by Vega's
+             * MSE video path (DECISIONS.md D9), so sessions can be told apart. */
+            unsigned prim = 2, trc = 2, mat = 2, full = 0;
+            int have = sps_get_colour(sps, n, &prim, &trc, &mat, &full) == 0;
+            emit("{\"type\":\"video_init\",\"bytes\":%zu,\"width\":%u,\"height\":%u,\"sender_sps\":\"%s\","
+                 "\"full_range\":%s,\"primaries\":%u,\"transfer\":%u,\"matrix\":%u}",
+                 len, w, h, hex, have ? (full ? "true" : "false") : "null", prim, trc, mat);
+        }
     }
     if (g_video_sink) {
         g_video_sink(kind == FMP4_INIT ? 0 : 1, data, len, (double)ts_ns / 1e6);

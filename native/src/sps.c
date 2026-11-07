@@ -133,6 +133,8 @@ typedef struct {
     size_t n, end;                         /* RBSP bytes; bit index of the stop bit */
     size_t vui_flag_at, timing_at, after_timing;
     unsigned vui_present, width, height;
+    int has_colour;                        /* video_signal_type_present_flag */
+    unsigned full_range, primaries, transfer, matrix;
 } sps_info;
 
 /* Parses an SPS up to its VUI timing fields; returns 0 on success. */
@@ -195,15 +197,24 @@ static int parse(const uint8_t *sps, size_t len, sps_info *si, reader *r) {
     si->vui_flag_at = r->pos;
     si->vui_present = bit(r);
     si->timing_at = si->after_timing = 0;
+    si->has_colour = 0;
+    si->full_range = 0;
+    si->primaries = si->transfer = si->matrix = 2; /* unspecified */
     if (si->vui_present) {
         if (bit(r)) {              /* aspect_ratio_info_present_flag */
             if (bits(r, 8) == 255) /* Extended_SAR */
                 bits(r, 32);
         }
         if (bit(r)) bit(r); /* overscan_info_present_flag, overscan_appropriate_flag */
-        if (bit(r)) {       /* video_signal_type_present_flag */
-            bits(r, 4);
-            if (bit(r)) bits(r, 24); /* colour_description_present_flag */
+        if (bit(r)) { /* video_signal_type_present_flag */
+            si->has_colour = 1;
+            bits(r, 3); /* video_format */
+            si->full_range = bit(r);
+            if (bit(r)) { /* colour_description_present_flag */
+                si->primaries = bits(r, 8);
+                si->transfer = bits(r, 8);
+                si->matrix = bits(r, 8);
+            }
         }
         if (bit(r)) { /* chroma_loc_info_present_flag */
             ue(r);
@@ -222,6 +233,18 @@ int sps_get_size(const uint8_t *sps, size_t len, unsigned *width, unsigned *heig
     if (parse(sps, len, &si, &r) != 0) return -1;
     *width = si.width;
     *height = si.height;
+    return 0;
+}
+
+int sps_get_colour(const uint8_t *sps, size_t len, unsigned *primaries, unsigned *transfer, unsigned *matrix,
+                   unsigned *full_range) {
+    sps_info si;
+    reader r;
+    if (parse(sps, len, &si, &r) != 0 || !si.has_colour) return -1;
+    *primaries = si.primaries;
+    *transfer = si.transfer;
+    *matrix = si.matrix;
+    *full_range = si.full_range;
     return 0;
 }
 

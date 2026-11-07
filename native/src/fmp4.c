@@ -228,6 +228,23 @@ static void emit_init(fmp4_muxer *m) {
     u16(&w, (uint16_t)m->pps_len);
     put(&w, m->pps, m->pps_len);
     end(&w, avcc);
+#ifndef FMP4_NO_COLR
+    {
+        /* The colour description and range, as a container box as well as in
+         * the SPS: MP4 players often read only this. iOS sends full-range
+         * BT.709/sRGB video (ITU-T H.273 codes). */
+        unsigned prim, trc, mat, full;
+        if (sps_get_colour(m->sps, m->sps_len, &prim, &trc, &mat, &full) == 0) {
+            size_t colr = box(&w, "colr");
+            put(&w, (const uint8_t *)"nclx", 4);
+            u16(&w, (uint16_t)prim);
+            u16(&w, (uint16_t)trc);
+            u16(&w, (uint16_t)mat);
+            u8(&w, full ? 0x80 : 0x00);
+            end(&w, colr);
+        }
+    }
+#endif
     end(&w, avc1);
     end(&w, stsd);
     a = fullbox(&w, "stts", 0, 0); u32(&w, 0); end(&w, a);

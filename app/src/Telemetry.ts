@@ -95,7 +95,19 @@ export function receiverEvent(e: ReceiverEvent): void {
       // which encoder setting was active.
       const sps = String(e.sender_sps ?? '');
       const level = sps.length >= 8 ? parseInt(sps.slice(6, 8), 16) / 10 : NaN;
-      setContext('video', {width: e.width, height: e.height, sender_sps: sps, level});
+      setContext('video', {
+        width: e.width,
+        height: e.height,
+        sender_sps: sps,
+        level,
+        full_range: e.full_range,
+        primaries: e.primaries,
+        transfer: e.transfer,
+        matrix: e.matrix,
+      });
+      // Full range is clipped by Vega's MSE path (DECISIONS.md D9).
+      senderAttributes['video.range'] = e.full_range === true ? 'full' : e.full_range === false ? 'limited' : 'unknown';
+      setTag('video.range', senderAttributes['video.range']);
       if (Number.isFinite(level)) {
         senderAttributes['video.level'] = String(level);
         setTag('video.level', String(level));
