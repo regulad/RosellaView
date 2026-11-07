@@ -113,6 +113,7 @@ function flatten(data: Record<string, unknown>): Record<string, string | number 
 export type PlayerMetrics = {appended: number; aheadMs: number; behindMs: number; queue: number; readyState: number};
 
 let previous: {t: number; s: Record<string, number>} | null = null;
+let prevCpu: {total: number; busy: number; proc: number} | null = null;
 
 /** Called every few seconds while a sender is connected. */
 export function receiverStats(s: Record<string, unknown>, video: PlayerMetrics | null, audio: PlayerMetrics | null): void {
@@ -140,6 +141,24 @@ export function receiverStats(s: Record<string, unknown>, video: PlayerMetrics |
   if (cur.mem_available_kb > 0) {
     metrics.gauge('system.mem_available', cur.mem_available_kb / 1024, {unit: 'megabyte', attributes});
   }
+  if (cur.swap_total_kb > 0) {
+    metrics.gauge('system.swap_used', (cur.swap_total_kb - cur.swap_free_kb) / 1024, {unit: 'megabyte', attributes});
+  }
+  // CPU: device-wide busy share, and our process's share of the whole device.
+  if (prevCpu && cur.cpu_total_ticks > prevCpu.total) {
+    const total = cur.cpu_total_ticks - prevCpu.total; // summed over all cores
+    metrics.gauge('cpu.system', (100 * (cur.cpu_busy_ticks - prevCpu.busy)) / total, {unit: 'percent', attributes});
+    metrics.gauge('cpu.process', (100 * (cur.proc_cpu_ticks - prevCpu.proc)) / total, {unit: 'percent', attributes});
+  }
+  prevCpu = {total: cur.cpu_total_ticks, busy: cur.cpu_busy_ticks, proc: cur.proc_cpu_ticks};
+  metrics.gauge('cpu.freq', cur.cpu_freq_khz / 1000, {unit: 'megahertz', attributes});
+  metrics.gauge('cpu.freq_max', cur.cpu_freq_max_khz / 1000, {unit: 'megahertz', attributes});
+  metrics.gauge('system.load1', cur.load1, {attributes});
+  // Pressure stall information: % of the last 10 s some task waited on memory / CPU.
+  metrics.gauge('system.pressure.memory', cur.psi_mem_some10, {unit: 'percent', attributes});
+  metrics.gauge('system.pressure.cpu', cur.psi_cpu_some10, {unit: 'percent', attributes});
+  metrics.gauge('process.threads', cur.threads, {attributes});
+  metrics.gauge('process.fds', cur.fds, {attributes});
   metrics.gauge('video.keyframes', cur.keyframes, {attributes});
   if (video) {
     metrics.gauge('video.buffer_ahead', video.aheadMs, {unit: 'millisecond', attributes});

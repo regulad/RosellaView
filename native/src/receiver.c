@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <dirent.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
@@ -687,24 +688,80 @@ static long proc_kb(const char *path, const char *key) {
     return kb;
 }
 
+/* First line of `path` into buf (empty on failure). */
+static void proc_line(const char *path, char *buf, size_t len) {
+    FILE *f = fopen(path, "r");
+    buf[0] = '\0';
+    if (!f) return;
+    if (!fgets(buf, (int)len, f)) buf[0] = '\0';
+    fclose(f);
+}
+
+/* `"key":value,...` system and process counters (CPU ticks, pressure, swap,
+ * frequency, threads, fds); the JS side turns tick counts into rates. */
+static void system_stats(char *out, size_t len) {
+    char line[512];
+    unsigned long long user = 0, nice = 0, sys = 0, idle = 0, iowait = 0, irq = 0, softirq = 0, steal = 0;
+    unsigned long utime = 0, stime = 0;
+    double load1 = 0, mem_some = 0, cpu_some = 0;
+    long threads = proc_kb("/proc/self/status", "Threads"), fds = 0;
+    long freq = -1, freq_max = -1;
+    char *p;
+    DIR *d;
+
+    proc_line("/proc/stat", line, sizeof line);
+    sscanf(line, "cpu %llu %llu %llu %llu %llu %llu %llu %llu", &user, &nice, &sys, &idle, &iowait, &irq, &softirq,
+           &steal);
+    proc_line("/proc/self/stat", line, sizeof line);
+    if ((p = strrchr(line, ')')) != NULL) {
+        /* fields after ") ": state(3) ... utime(14) stime(15) */
+        sscanf(p + 2, "%*c %*d %*d %*d %*d %*d %*u %*u %*u %*u %*u %lu %lu", &utime, &stime);
+    }
+    proc_line("/proc/loadavg", line, sizeof line);
+    sscanf(line, "%lf", &load1);
+    proc_line("/proc/pressure/memory", line, sizeof line);
+    sscanf(line, "some avg10=%lf", &mem_some);
+    proc_line("/proc/pressure/cpu", line, sizeof line);
+    sscanf(line, "some avg10=%lf", &cpu_some);
+    proc_line("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq", line, sizeof line);
+    sscanf(line, "%ld", &freq);
+    proc_line("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq", line, sizeof line);
+    sscanf(line, "%ld", &freq_max);
+    if ((d = opendir("/proc/self/fd")) != NULL) {
+        while (readdir(d)) fds++;
+        closedir(d);
+        fds -= 2; /* . and .. */
+    }
+    snprintf(out, len,
+             "\"cpu_busy_ticks\":%llu,\"cpu_total_ticks\":%llu,\"proc_cpu_ticks\":%lu,\"clk_tck\":%ld,"
+             "\"ncpu\":%ld,\"load1\":%.2f,\"psi_mem_some10\":%.2f,\"psi_cpu_some10\":%.2f,"
+             "\"cpu_freq_khz\":%ld,\"cpu_freq_max_khz\":%ld,\"threads\":%ld,\"fds\":%ld,"
+             "\"swap_total_kb\":%ld,\"swap_free_kb\":%ld",
+             user + nice + sys + irq + softirq + steal, user + nice + sys + idle + iowait + irq + softirq + steal,
+             utime + stime, sysconf(_SC_CLK_TCK), sysconf(_SC_NPROCESSORS_ONLN), load1, mem_some, cpu_some, freq,
+             freq_max, threads, fds, proc_kb("/proc/meminfo", "SwapTotal"), proc_kb("/proc/meminfo", "SwapFree"));
+}
+
 char *receiver_stats_json(void) {
     char *json = NULL;
     uint64_t keyframes = 0, concealed = 0;
+    char sys[768];
     pthread_mutex_lock(&g_mux_lock);
     if (g_mux) keyframes = fmp4_keyframes(g_mux);
     pthread_mutex_unlock(&g_mux_lock);
     pthread_mutex_lock(&g_audio_lock);
     if (g_audio) concealed = audio_concealed(g_audio);
     pthread_mutex_unlock(&g_audio_lock);
+    system_stats(sys, sizeof sys);
     if (asprintf(&json,
                  "{\"running\":%s,\"connections\":%d,\"video_frames\":%" PRIuFAST64 ",\"video_bytes\":%" PRIuFAST64
                  ",\"audio_packets\":%" PRIuFAST64 ",\"audio_bytes\":%" PRIuFAST64 ",\"audio_ct\":%d,\"audio_concealed_ms\":%" PRIu64 ",\"keyframes\":%" PRIu64
-                 ",\"rss_kb\":%ld,\"rss_peak_kb\":%ld,\"mem_available_kb\":%ld}",
+                 ",\"rss_kb\":%ld,\"rss_peak_kb\":%ld,\"mem_available_kb\":%ld,%s}",
                  g_raop ? "true" : "false", atomic_load(&g_connections), atomic_load(&g_video_frames),
                  atomic_load(&g_video_bytes), atomic_load(&g_audio_packets), atomic_load(&g_audio_bytes),
                  atomic_load(&g_audio_ct), concealed * 1000 / 44100, keyframes,
                  proc_kb("/proc/self/status", "VmRSS"), proc_kb("/proc/self/status", "VmHWM"),
-                 proc_kb("/proc/meminfo", "MemAvailable")) < 0)
+                 proc_kb("/proc/meminfo", "MemAvailable"), sys) < 0)
         json = NULL;
     return json;
 }
