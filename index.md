@@ -2,6 +2,7 @@
 title: RosellaView privacy policy
 ---
 
+# RosellaView privacy policy
 
 *Effective 7 November 2026. Publisher: Parker Wahle (RosellaSoftware), regulad@regulad.xyz.*
 
