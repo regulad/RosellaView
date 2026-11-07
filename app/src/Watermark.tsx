@@ -7,11 +7,15 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import React, {useEffect, useRef} from 'react';
-import {Animated, Dimensions, Easing, StyleSheet, Text} from 'react-native';
+import {Animated, Dimensions, Easing, Image, StyleSheet, Text} from 'react-native';
 
 const SCREEN = Dimensions.get('window');
-const PLATE_W = 380;
+// The pill holds a wordmark: the logo (docs/brand/RosellaView.svg, without
+// its background, rendered at 2x) left of "RosellaView" in the system font.
+const PLATE_W = 480;
 const PLATE_H = 110;
+const MARK = 84;
+const LOGO = require('./assets/logo_mark.png');
 const SPEED = 180; // px per second
 
 export const Watermark = () => {
@@ -63,6 +67,7 @@ export const Watermark = () => {
 
   return (
     <Animated.View pointerEvents="none" style={[styles.plate, {transform: pos.getTranslateTransform()}]}>
+      <Image source={LOGO} style={styles.mark} />
       <Text style={styles.text}>RosellaView</Text>
     </Animated.View>
   );
@@ -78,9 +83,11 @@ const styles = StyleSheet.create({
     opacity: 0.8,
     backgroundColor: '#fff',
     borderRadius: PLATE_H / 2, // pill-shaped
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10,
   },
+  mark: {width: MARK, height: MARK, marginRight: 10},
   text: {color: '#000', fontSize: 56, fontWeight: 'bold'},
 });
