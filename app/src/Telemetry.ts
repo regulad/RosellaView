@@ -47,9 +47,18 @@ export function senderKind(model: string): string {
 }
 
 
+// Personal data in receiver events, used on the TV only: device names, the
+// sender's AirPlay ID, the TV's own (MAC-derived) ID. Only the sender's model
+// and OS version go to Sentry (owner's call; PRIVACY.md).
+const PRIVATE_FIELDS = ['name', 'deviceid'];
+
 /** Every receiver event: a breadcrumb, a log, and sender/stream context where it applies. */
 export function receiverEvent(e: ReceiverEvent): void {
-  const {type, ...data} = e;
+  const {type, ...all} = e;
+  const data: Record<string, unknown> = {...all};
+  for (const k of PRIVATE_FIELDS) {
+    delete data[k];
+  }
   const isLibLog = type === 'log';
   addBreadcrumb({
     category: isLibLog ? 'libairplay' : 'receiver',
@@ -63,7 +72,7 @@ export function receiverEvent(e: ReceiverEvent): void {
     case 'client_request': {
       const model = String(e.model);
       senderAttributes = {'sender.model': model, 'sender.kind': senderKind(model)};
-      setContext('sender', {device_id: e.deviceid, model, name: e.name, kind: senderKind(model)});
+      setContext('sender', {model, kind: senderKind(model)});
       setTag('sender.model', model);
       setTag('sender.kind', senderKind(model));
       break;
@@ -79,7 +88,7 @@ export function receiverEvent(e: ReceiverEvent): void {
       const os = `${String(e.os_name)} ${String(e.os_version)}`.trim();
       senderAttributes['sender.os'] = os;
       setContext('sender_os', {name: e.os_name, version: e.os_version, build: e.os_build_version});
-      setContext('sender_airplay', {source_version: e.source_version, mac_address: e.mac_address});
+      setContext('sender_airplay', {source_version: e.source_version});
       setTag('sender.os', String(e.os_name));
       setTag('sender.os_version', os);
       setTag('sender.os_build', String(e.os_build_version));

@@ -125,9 +125,9 @@ export function initSentry(): void {
     release: BUILD.release,
     dist: BUILD.dist,
     environment: BUILD.environment,
-    // Sender details are set explicitly (Telemetry.ts), to tell iPhone, iPad
-    // and Mac crashes apart; this also keeps user info on logs and metrics.
-    dataCollection: {userInfo: true},
+    // Sender model and OS are set explicitly (Telemetry.ts), to tell iPhone,
+    // iPad and Mac crashes apart. No user fields: nothing personal, and no IP.
+    dataCollection: {userInfo: false},
     attachStacktrace: true,
     maxBreadcrumbs: 200,
     stackParser,

@@ -15,6 +15,10 @@ A RosellaSoftware app, published by Parker Wahle <regulad@regulad.xyz>: a screen
 - **Licence: AGPL-3.0-or-later** (`LICENSE.md`, the FSF Markdown text). Don't add dependencies whose licence is incompatible with the GPL, e.g. libfdk-aac or a GPL/non-free FFmpeg configuration.
 - **Never mention "Vega" in Appstore listing text, and never put "AirPlay" or Apple's glyph in the app's name or icon.** Description wording is in `docs/PLAN.md` §1.3.
 
+## Tooling first
+
+- **Don't invent harnesses for tasks that existing SDK tooling performs.** Before writing a one-off build, script or code path to change device state (purchases, app data, settings), look for the SDK or device tool that does it: the IAP App Tester and its configuration, `vega device …`, `vda`, `loggingctl`. Use that instead, and ask if nothing fits.
+
 ## Node-API runtime quirks (each one crashed the app)
 
 - `napi_create_async_work`/`napi_queue_async_work` abort. Use your own `pthread` and settle via `napi_threadsafe_function`.

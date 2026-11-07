@@ -98,9 +98,9 @@ export const About = ({compatibilityMode, onCompatibilityMode, onClose}: Props) 
         </Text>
         <Text style={styles.small}>
           To find and fix problems, RosellaView sends crash reports and diagnostics to Sentry (sentry.io): errors,
-          playback and performance statistics, this TV's software version, and the name, model, operating system
-          version, AirPlay ID and network address (MAC) of the device you mirror from. Purchases are handled by the
-          Amazon Appstore. Privacy policy: {PRIVACY_URL}
+          playback and performance statistics, this TV's software version, and the model and operating system
+          version of the device you mirror from (such as "iPhone18,1, iOS 27"). Nothing that identifies you or your
+          devices is sent: no names, IDs or addresses. Purchases are handled by the Amazon Appstore. Privacy policy: {PRIVACY_URL}
         </Text>
 
         <Text style={styles.heading}>Licence</Text>
@@ -153,7 +153,6 @@ export const About = ({compatibilityMode, onCompatibilityMode, onClose}: Props) 
           brightest highlights and the darkest shadows will lose fidelity when this option is on.
         </Text>
       </ScrollView>
-      <Text style={styles.hint}>{atEnd ? 'Press Back to return.' : '▼ Scroll down · Back to return'}</Text>
     </View>
   );
 };
@@ -161,14 +160,13 @@ export const About = ({compatibilityMode, onCompatibilityMode, onClose}: Props) 
 const styles = StyleSheet.create({
   root: {flex: 1, backgroundColor: '#000', alignItems: 'center'},
   scroll: {flex: 1, width: '80%'},
-  content: {paddingTop: 72, paddingBottom: 48},
+  content: {paddingTop: 72, paddingBottom: 72},
   title: {color: '#fff', fontSize: 44, fontWeight: 'bold'},
   heading: {color: '#fff', fontSize: 28, fontWeight: 'bold', marginTop: 36, marginBottom: 10},
   body: {color: '#aaa', fontSize: 24, marginTop: 4},
   small: {color: '#aaa', fontSize: 22, lineHeight: 32, marginBottom: 10},
   notice: {color: '#aaa', fontSize: 22, lineHeight: 32},
   after: {marginTop: 10},
-  hint: {color: '#666', fontSize: 20, paddingVertical: 20},
   checkRow: {flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', paddingVertical: 8, marginBottom: 8},
   checkLabel: {color: '#ddd', fontSize: 26, marginRight: 18},
   box: {width: 34, height: 34, borderWidth: 3, borderColor: '#888', borderRadius: 4, alignItems: 'center', justifyContent: 'center'},

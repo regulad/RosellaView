@@ -17,15 +17,15 @@ The owner does the submission; nothing here is automated. Listing wording rules 
 - **Does the app collect user data?** Yes.
 - **Data types:**
   - **Crash logs and diagnostics:** yes. Errors, crash reports, performance and playback statistics.
-  - **Device or other IDs:** yes. The sender's AirPlay device ID and MAC address.
-  - **Device information:** the sender's name, model and OS version; the TV's model and software version.
+  - **Device or other IDs:** no. Device names, AirPlay IDs and MAC/IP addresses are kept off Sentry (Telemetry.ts, receiver.c), and the Sentry project doesn't store IP addresses.
+  - **Device information:** the sender's model and OS version; the TV's model and software version. Not linked to a person.
   - **Purchase history:** no. Amazon handles purchases.
   - **Audio, video, photos, screen content:** no. Mirrored content isn't recorded or transmitted off the local network.
   - **Location, contacts, health, financial, browsing:** no.
 - **Purpose:** app functionality and analytics (diagnostics) only. No advertising, no sale, no sharing beyond the processor.
 - **Third party:** Sentry (Functional Software, Inc.), as processor.
 - **Encrypted in transit:** yes (HTTPS).
-- **Deletion:** on request by email (see the privacy policy).
+- **Deletion:** nothing is linked to a person, so there's nothing to request deletion of; questions by email.
 - **Children:** not directed at children.
 
 ## Listing notes

@@ -176,18 +176,64 @@ static char *json_escape(const char *s) {
     return out;
 }
 
+static void emit_json(char *json, int crumb) {
+    if (!json) return;
+    if (crumb) rv_sentry_breadcrumb("receiver", json);
+    if (g_sink) {
+        g_sink(json);
+    } else {
+        free(json);
+    }
+}
+
+/* An event for JS and, as a breadcrumb, for crash reports. */
 static void emit(const char *fmt, ...) {
     va_list ap;
     char *json = NULL;
     va_start(ap, fmt);
     if (vasprintf(&json, fmt, ap) < 0) json = NULL;
     va_end(ap);
-    if (!json) return;
-    rv_sentry_breadcrumb("receiver", json);
-    if (g_sink) {
-        g_sink(json);
-    } else {
-        free(json);
+    emit_json(json, 1);
+}
+
+/* An event that carries personal data (device names, IDs): for JS only, which
+ * keeps it on the TV (Telemetry.ts strips those fields before Sentry). */
+static void emit_private(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+static void emit_private(const char *fmt, ...) {
+    va_list ap;
+    char *json = NULL;
+    va_start(ap, fmt);
+    if (vasprintf(&json, fmt, ap) < 0) json = NULL;
+    va_end(ap);
+    emit_json(json, 0);
+}
+
+/* Replaces network addresses in a libairplay log line with "<addr>": words
+ * with three '.' and digits (IPv4), five ':' (MAC), or two ':' and a "::",
+ * '%' or hex letter (IPv6). Times ("22:44:39") stay. */
+static void redact_addresses(char *s) {
+    char *p = s;
+    while (*p) {
+        char *w = p, *e;
+        int colons = 0, dots = 0, digits = 0, v6 = 0;
+        while (*w == ' ') w++;
+        e = w;
+        while (*e && *e != ' ') {
+            if (*e == ':') colons++;
+            else if (*e == '.') dots++;
+            else if (*e >= '0' && *e <= '9') digits++;
+            if (*e == '%' || (*e >= 'a' && *e <= 'f') || (*e >= 'A' && *e <= 'F') || (*e == ':' && e[1] == ':')) v6 = 1;
+            e++;
+        }
+        if (colons >= 5 || (colons >= 2 && v6) || (dots >= 3 && digits >= 4)) {
+            size_t rest = strlen(e);
+            if (e - w >= 6) {
+                memcpy(w, "<addr>", 6);
+                memmove(w + 6, e, rest + 1);
+                e = w + 6;
+            }
+        }
+        p = *e ? e + 1 : e;
     }
 }
 
@@ -211,7 +257,8 @@ static void cb_log(void *cls, int level, const char *msg) {
         emit_str("client_user_agent", "user_agent", ua);
     }
     m = json_escape(msg);
-    emit("{\"type\":\"log\",\"level\":%d,\"msg\":\"%s\"}", level, m);
+    if (m) redact_addresses(m);
+    emit("{\"type\":\"log\",\"level\":%d,\"msg\":\"%s\"}", level, m ? m : "");
     free(m);
 }
 
@@ -239,11 +286,13 @@ static void cb_report_client_request(void *cls, char *deviceid, char *model, cha
     (void)cls;
     *admit = true;
     {
-        const char *pairs[] = {"device_id", deviceid, "model", model, "name", name};
-        rv_sentry_set_context("sender", pairs, 3);
+        /* Only the model goes to Sentry: the device's name and AirPlay ID are
+         * personal data, used on the TV only (UI, per-device audio delay). */
+        const char *pairs[] = {"model", model};
+        rv_sentry_set_context("sender", pairs, 1);
         rv_sentry_set_tag("sender.model", model);
     }
-    emit("{\"type\":\"client_request\",\"deviceid\":\"%s\",\"model\":\"%s\",\"name\":\"%s\"}", d, m, n);
+    emit_private("{\"type\":\"client_request\",\"deviceid\":\"%s\",\"model\":\"%s\",\"name\":\"%s\"}", d, m, n);
     free(d);
     free(m);
     free(n);
@@ -255,21 +304,21 @@ static void cb_report_client_details(void *cls, const char *os_name, const char 
                                      const char *mac_address) {
     char *on = json_escape(os_name ? os_name : ""), *ov = json_escape(os_version ? os_version : ""),
          *ob = json_escape(os_build_version ? os_build_version : ""),
-         *sv = json_escape(source_version ? source_version : ""), *mac = json_escape(mac_address ? mac_address : "");
+         *sv = json_escape(source_version ? source_version : "");
     const char *os_pairs[] = {"name", os_name, "version", os_version, "build", os_build_version};
     (void)cls;
+    (void)mac_address; /* personal data: not used */
     rv_sentry_set_context("sender_os", os_pairs, 3);
     rv_sentry_set_tag("sender.os", os_name);
     rv_sentry_set_tag("sender.os_version", os_version);
     rv_sentry_set_tag("sender.airplay_version", source_version);
     emit("{\"type\":\"client_details\",\"os_name\":\"%s\",\"os_version\":\"%s\",\"os_build_version\":\"%s\","
-         "\"source_version\":\"%s\",\"mac_address\":\"%s\"}",
-         on, ov, ob, sv, mac);
+         "\"source_version\":\"%s\"}",
+         on, ov, ob, sv);
     free(on);
     free(ov);
     free(ob);
     free(sv);
-    free(mac);
 }
 
 /* ---------- native video (rosella_video.h) ---------- */
@@ -565,7 +614,8 @@ static void cb_register_client(void *cls, const char *device_id, const char *pk_
     (void)cls;
     (void)pk_str;
     (void)name;
-    emit_str("register_client", "deviceid", device_id);
+    emit_private("{\"type\":\"register_client\"}");
+    (void)device_id;
 }
 
 static bool cb_check_register(void *cls, const char *pk_str) {
@@ -810,7 +860,8 @@ int receiver_start(const char *base_name) {
     }
     {
         char *n = json_escape(name);
-        emit("{\"type\":\"started\",\"name\":\"%s\",\"port\":%u,\"deviceid\":\"%s\",\"features\":\"0x%" PRIx64 "\"}",
+        /* The TV's ID derives from its MAC address: kept off Sentry. */
+        emit_private("{\"type\":\"started\",\"name\":\"%s\",\"port\":%u,\"deviceid\":\"%s\",\"features\":\"0x%" PRIx64 "\"}",
              n, port, device_id, dnssd_get_airplay_features(g_dnssd));
         report_memlock();
         free(n);
