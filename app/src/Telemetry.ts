@@ -110,7 +110,7 @@ function flatten(data: Record<string, unknown>): Record<string, string | number 
   return out;
 }
 
-export type PlayerMetrics = {appended: number; aheadMs: number; queue: number; readyState: number};
+export type PlayerMetrics = {appended: number; aheadMs: number; behindMs: number; queue: number; readyState: number};
 
 let previous: {t: number; s: Record<string, number>} | null = null;
 
@@ -135,6 +135,9 @@ export function receiverStats(s: Record<string, unknown>, video: PlayerMetrics |
   if (video) {
     metrics.gauge('video.buffer_ahead', video.aheadMs, {unit: 'millisecond', attributes});
     metrics.gauge('video.queue', video.queue, {attributes});
+    // Already-played video the player still holds; it should level off once
+    // the player evicts (DECISIONS.md D6).
+    metrics.gauge('video.buffer_behind', video.behindMs, {unit: 'millisecond', attributes});
   }
   if (audio) {
     metrics.gauge('audio.buffer_ahead', audio.aheadMs, {unit: 'millisecond', attributes});

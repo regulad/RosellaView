@@ -161,9 +161,10 @@ export class MirrorPlayer {
       vp.play();
       this.log(`${this.stream.kind} play()`);
     }
-    // No manual remove(): the player evicts old samples itself
-    // (evict_coded_frames), and removing near the read head makes it
-    // declare a discontinuity and drop everything until the next keyframe.
+    // No manual remove(): the player evicts old samples itself once it sees
+    // sync samples (native/src/fmp4.c flags one a second), and removing near
+    // the read head makes it declare a discontinuity and drop everything until
+    // the next sync sample.
     this.pump();
   }
 
@@ -196,14 +197,21 @@ export class MirrorPlayer {
     }
   }
 
-  metrics(): {appended: number; aheadMs: number; queue: number; readyState: number} | null {
+  metrics(): {appended: number; aheadMs: number; behindMs: number; queue: number; readyState: number} | null {
     const vp = this.player;
     if (!vp) {
       return null;
     }
     const b = vp.buffered;
     const end = b && b.length ? b.end(b.length - 1) : vp.currentTime;
-    return {appended: this.appended, aheadMs: Math.round((end - vp.currentTime) * 1000), queue: this.queue.length, readyState: vp.readyState};
+    const start = b && b.length ? b.start(0) : vp.currentTime;
+    return {
+      appended: this.appended,
+      aheadMs: Math.round((end - vp.currentTime) * 1000),
+      behindMs: Math.round((vp.currentTime - start) * 1000),
+      queue: this.queue.length,
+      readyState: vp.readyState,
+    };
   }
 
   stats(): string {

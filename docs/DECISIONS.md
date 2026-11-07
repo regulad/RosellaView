@@ -110,3 +110,20 @@ The laptop's `create_ap` AP now runs with `IEEE80211N=1`, started via `create_ap
 - Every build that should be readable in Sentry goes through `scripts/build.sh`.
 - Sender details are personal data, so the Appstore privacy disclosure must cover crash and diagnostic data sent to a third party (Sentry).
 - The sender's OS name, version and build, its AirPlay version and its MAC address come from the SETUP request. libairplay doesn't pass them on, so our fork does: `regulad/UxPlay`, branch `rosella`, adds a `report_client_details` callback.
+
+## D6. Video sync samples: every frame a second, flagged in tfhd (2026-11-07)
+
+**Decision:** A video fragment is flagged as a sync sample if it's a real IDR frame, or if a second of media time has passed since the last flagged fragment. The flag goes in the `tfhd` default sample flags, not in `trun`.
+
+**Why:**
+- iOS and macOS send one keyframe per mirroring session.
+- MSE keeps already-played compressed video for seeking, and discards it only in whole runs from one sync sample to the next. Vega's media library hard-codes a 100 MB eviction threshold (`DEFAULT_EVICTION_THRESHOLD`, OS-provided JS).
+- With no evictable runs, the `SourceBuffer` filled after about 2 minutes of a Mac's 8 Mbit/s: `QuotaExceededError`, then a frozen picture. The iPhone stall at about 6 minutes was the same thing.
+- **The flag was in the wrong box.** Vega's player ignores `trun`'s per-sample fields, `first-sample-flags` as well as durations. Flagging in `trun` alone meant the player saw no sync sample at all, the real IDR included.
+- **Trimming ourselves didn't work.** A `remove()` behind the playhead cascaded to the next sync sample it knew of. There was none, so it removed everything, including the frames about to play.
+- The decoder never needs old compressed frames. A P-frame refers to decoded pictures in the decoder's own reference buffer. Flagging a P-frame as a sync sample only tells MSE where it may cut.
+
+**Implications:**
+- The flag claims a P-frame is a safe place to start decoding, which isn't strictly true. If the player ever restarts decoding at one of these frames, after a seek or a detected discontinuity, expect a moment of smearing until the references rebuild. Today the alternative is a black screen until the next real keyframe, which may never come.
+- Never seek the live stream.
+- The GOP cache for rebuilding a stalled player (`fmp4_resync`) still goes by real IDRs.
