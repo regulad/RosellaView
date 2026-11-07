@@ -128,6 +128,11 @@ The laptop's `create_ap` AP now runs with `IEEE80211N=1`, started via `create_ap
 - `fmp4.c` still flags a sync sample once a second, in `tfhd`. That's harmless, and right for players that honour it.
 - The trim only works because D7 makes the sender send real IDRs.
 
+**To revisit (low priority):** is the trim still needed now that IDRs arrive every 10 s? With a single IDR the player never evicted. With regular IDRs, nobody has tested it with the trim off: every run with forced keyframes had it on.
+- **The test:** a Mac session with the trim disabled and keyframe requests on. At about 8 Mbit/s, `video.buffer_behind` reaches the 100 MB threshold in about 2 minutes, then either drops (the player evicts) or the picture freezes.
+- **Keep the trim even if it passes,** if the player's buffer grows as data arrives. Holding ~10 s (~10 MB) instead of 100 MB matters on a 1 GB device.
+- **Find out how it's allocated.** If the 100 MB is reserved up front (a fixed pool, which would be more usual for a real-time AV buffer), the trim saves no memory, and it would be extra code to keep only if the player can't evict by itself. Process RSS over a session, with the trim on and off, tells which.
+
 ## D7. Ask the sender for keyframes: forceKeyFrame on the event channel (2026-11-07)
 
 **Decision:**

@@ -160,6 +160,7 @@ Exit criteria: pick a video backend, an audio backend and a latency budget. Reco
 - HLS "AirPlay video" URL playback (`on_video_play`, already in libairplay), which the W3C player can play directly.
 - Upstreaming portability fixes to UxPlay.
 - A DLNA renderer mode sharing the same shell.
+- *Low priority:* find out whether `MirrorPlayer`'s back-buffer trim is still needed now that senders send keyframes every 10 s (DECISIONS.md D6). See D6's "To revisit".
 
 ## 5. Upstream and submodule policy
 
