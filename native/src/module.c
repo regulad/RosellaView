@@ -57,6 +57,7 @@ static int string_arg(napi_env env, napi_callback_info info, char *buf, size_t l
     if (napi_get_cb_info(env, info, &argc, argv, NULL, NULL) != napi_ok || argc < 1) return 0;
     if (napi_typeof(env, argv[0], &t) != napi_ok || t != napi_string) return 0;
     if (napi_get_value_string_utf8(env, argv[0], buf, len, &copied) != napi_ok) return 0;
+    buf[copied < len ? copied : len - 1] = '\0'; /* Vega's copy isn't NUL-terminated */
     return 1;
 }
 

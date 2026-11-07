@@ -1,9 +1,9 @@
 /*
  * MirrorPlayer: plays one of the receiver's fragmented-MP4 streams (video or
  * audio) through the OS's W3C media player (MSE). One instance per stream.
- * Video and audio get separate players: our video timestamps are nominal
- * (fixed 1/60 s per frame, see native/src/fmp4.c), so a shared MediaSource
- * clocked by real-time audio would drop video as late.
+ * Video and audio get separate players: video pauses longer than 190 ms (a
+ * still screen) are cut short in the timestamps (see native/src/fmp4.c), so a
+ * shared MediaSource clocked by real-time audio would drop video as late.
  * See docs/DECISIONS.md D1 and D3.
  *
  * Copyright (C) 2026 Parker Wahle

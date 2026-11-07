@@ -14,7 +14,7 @@ A RosellaSoftware app, published by Parker Wahle <regulad@regulad.xyz>: a screen
 ## Node-API runtime quirks (each one crashed the app)
 
 - `napi_create_async_work`/`napi_queue_async_work` abort. Use your own `pthread` and settle via `napi_threadsafe_function`.
-- `napi_get_value_string_utf8(env, v, NULL, 0, &len)` (the length query) aborts. Pass a real buffer.
+- `napi_get_value_string_utf8(env, v, NULL, 0, &len)` (the length query) aborts. Pass a real buffer, and NUL-terminate it yourself at the returned length: Vega doesn't.
 - `napi_create_arraybuffer` is "not implemented" (it logs an error and returns no buffer). Use `napi_create_external_arraybuffer` with a finalizer.
 - `syslog()` from the app doesn't reach `loggingctl log -f`, but JS `console.log` does (first line only).
 

@@ -73,3 +73,22 @@ The laptop's `create_ap` AP now runs with `IEEE80211N=1`, started via `create_ap
 - Mux as a `fLaC` track in fragmented MP4, appended to a second `SourceBuffer` on the same `MediaSource` as the video so the player keeps A/V sync.
 - Pass AAC-LC (`ct=4`) through as `mp4a.40.2` if a sender ever uses it.
 - Fill silence while audio is idle, so the audio buffer never starves video playback.
+
+## D4. Video frame timing: real durations under a 10 fps SPS declaration (2026-11-07)
+
+**Decision:** Each video frame's `tfhd` default duration is the sender-timestamp interval before it, clamped to 1–190 ms. The SPS is rewritten to declare 10 fps.
+
+**Why:**
+- Vega's MSE player declares a discontinuity at any frame lasting more than twice the frame duration in the SPS VUI timing. It then drops everything until the next keyframe, and senders send keyframes rarely; iOS may send one per session. With no VUI timing at all, it assumes 1 ms per frame.
+- Earlier builds therefore declared 60 fps and gave every frame 1/60 s. That works for a 60 fps iPhone, but a Mac playing a film sends ~24 fps, so the player went through each second of video in 0.4 s and then waited (visible stutter).
+- Probe (`~/vega-probe/mse-probe`, streams made by `~/vega-probe/vt/tool/vtprobe` with this muxer, fed at their real rate; rate = media time ÷ wall time):
+  - 24 fps feed, declared 60 fps, 1/60 s each: rate **0.40**, freezes up to 980 ms
+  - 24 fps feed, declared 60 fps, 1/24 s each: never plays (discontinuity)
+  - 24 fps feed, declared 60 fps, alternating 2/60 and 3/60 s: never plays
+  - 24 fps feed, declared 24 or 10 fps, 1/24 s each: rate **1.00**, no drops
+  - 60 fps feed, declared 24 or 10 fps, 1/60 s each: rate **1.00**, no drops
+  - 60 fps feed, declared 10 fps, jittered 1/90–1/45 s (mean 1/60): rate **1.00**, no drops
+- So container durations are honoured; the declaration only sets the ceiling (2 × 1/10 s).
+
+**Implications:**
+- Longer pauses (a still screen sends no frames) are cut to 190 ms in the timeline. The player then waits for the next frame, as before.

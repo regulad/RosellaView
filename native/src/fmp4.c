@@ -15,6 +15,13 @@
 
 #define TIMESCALE 90000u
 #define DEFAULT_DURATION (TIMESCALE / 60u)
+/* The frame rate declared in the SPS. Vega's player declares a discontinuity
+ * (and drops everything until the next keyframe) at any frame lasting over
+ * twice the declared frame duration, so declare a low rate and real
+ * durations up to MAX_DURATION play as given (docs/DECISIONS.md D4). */
+#define VUI_FPS 10u
+#define MIN_DURATION (TIMESCALE / 1000u)
+#define MAX_DURATION (2u * TIMESCALE / VUI_FPS - TIMESCALE / 100u) /* 190 ms */
 #define MAX_PS 256
 #define GOP_CACHE_MAX (16u * 1024u * 1024u) /* frames kept since the last keyframe, for resync */
 #define REPLAY_DURATION (TIMESCALE / 1000u) /* 1 ms: replayed frames decode, then live resumes */
@@ -114,9 +121,8 @@ static const uint8_t *next_nal(const uint8_t *b, size_t n, size_t *pos, size_t *
 static void emit_init(fmp4_muxer *m) {
     buf_t w = {0};
     uint8_t sps[MAX_PS + 32];
-    /* Vega's MSE pipeline takes frame durations from the SPS's VUI timing and
-     * assumes 1 ms per frame without it, so declare 60 fps. */
-    size_t sps_len = sps_set_timing(m->sps, m->sps_len, 60, sps, sizeof sps);
+    /* Vega's MSE pipeline assumes 1 ms per frame without VUI timing; see VUI_FPS. */
+    size_t sps_len = sps_set_timing(m->sps, m->sps_len, VUI_FPS, sps, sizeof sps);
     size_t moov, trak, mdia, minf, dinf, dref, stbl, stsd, avc1, avcc, mvex, a;
     unsigned wpx = m->width ? m->width : 1920, hpx = m->height ? m->height : 1080;
     unsigned sps_w, sps_h;
@@ -388,7 +394,7 @@ void fmp4_push_h264(fmp4_muxer *m, const uint8_t *au, size_t len, uint64_t ts_ns
     size_t pos = 0, nal_len;
     const uint8_t *nal;
     int sync = 0, ps_changed = 0;
-    const uint32_t duration = DEFAULT_DURATION;
+    uint32_t duration = DEFAULT_DURATION;
 
     while ((nal = next_nal(au, len, &pos, &nal_len)) != NULL) {
         int type;
@@ -424,11 +430,16 @@ void fmp4_push_h264(fmp4_muxer *m, const uint8_t *au, size_t len, uint64_t ts_ns
         m->have_init = 1;
     }
 
-    /* Every frame gets the same nominal duration. Durations taken from the
-     * sender's (irregular) timestamps trip MSE's discontinuity rule -- a gap
-     * over twice the previous frame's duration -- after which the player
-     * drops everything until the next keyframe, and iOS sends those rarely.
-     * When the sender slows down, playback just catches up and waits. */
+    /* Senders run at the content's rate (a Mac playing a film sends ~24 fps,
+     * an iPhone up to 60), so each frame lasts as long as the interval before
+     * it: the next frame's time isn't known yet, and waiting for it would add
+     * a frame of latency. Over time the media clock then tracks the sender's.
+     * Pauses longer than MAX_DURATION (a still screen sends nothing) are cut
+     * short; the player just waits for the next frame. */
+    if (m->have_last_ts && ts_ns > m->last_ts_ns) {
+        uint64_t ticks = (ts_ns - m->last_ts_ns) * TIMESCALE / 1000000000u;
+        duration = ticks < MIN_DURATION ? MIN_DURATION : ticks > MAX_DURATION ? MAX_DURATION : (uint32_t)ticks;
+    }
     m->last_ts_ns = ts_ns;
     m->have_last_ts = 1;
 
