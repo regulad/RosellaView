@@ -110,7 +110,7 @@ function flatten(data: Record<string, unknown>): Record<string, string | number 
   return out;
 }
 
-export type PlayerMetrics = {appended: number; aheadMs: number; behindMs: number; queue: number; readyState: number};
+export type PlayerMetrics = {appended: number; aheadMs: number; queue: number; readyState: number};
 
 let previous: {t: number; s: Record<string, number>} | null = null;
 
@@ -135,8 +135,6 @@ export function receiverStats(s: Record<string, unknown>, video: PlayerMetrics |
   if (video) {
     metrics.gauge('video.buffer_ahead', video.aheadMs, {unit: 'millisecond', attributes});
     metrics.gauge('video.queue', video.queue, {attributes});
-    // How much already-played video is still buffered (trimmed to ~10 s).
-    metrics.gauge('video.buffer_behind', video.behindMs, {unit: 'millisecond', attributes});
   }
   if (audio) {
     metrics.gauge('audio.buffer_ahead', audio.aheadMs, {unit: 'millisecond', attributes});
