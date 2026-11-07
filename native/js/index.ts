@@ -12,9 +12,11 @@ export enum SegmentKind {
 interface NativeReceiver {
   setEventListener(listener: ((json: string) => void) | null): boolean;
   setVideoListener(listener: ((kind: number, segment: ArrayBuffer) => void) | null): boolean;
+  setAudioListener(listener: ((kind: number, segment: ArrayBuffer) => void) | null): boolean;
   start(name: string): boolean;
   stop(): boolean;
   isRunning(): boolean;
+  resyncVideo(): boolean;
   getStats(): string;
 }
 
@@ -33,8 +35,14 @@ export const Receiver = {
   onVideo(listener: ((kind: SegmentKind, segment: ArrayBuffer) => void) | null): void {
     native.setVideoListener(listener ? (kind, segment) => listener(kind as SegmentKind, segment) : null);
   },
+  /** Receives audio as fMP4 (FLAC, or AAC-LC passthrough); a new init segment starts each stream. */
+  onAudio(listener: ((kind: SegmentKind, segment: ArrayBuffer) => void) | null): void {
+    native.setAudioListener(listener ? (kind, segment) => listener(kind as SegmentKind, segment) : null);
+  },
   start: (name: string): boolean => native.start(name),
   stop: (): boolean => native.stop(),
   isRunning: (): boolean => native.isRunning(),
+  /** After rebuilding a stalled video player: replays the current GOP to it. */
+  resyncVideo: (): boolean => native.resyncVideo(),
   stats: (): Record<string, unknown> => JSON.parse(native.getStats()) as Record<string, unknown>,
 };

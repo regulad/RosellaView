@@ -16,8 +16,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <time.h>
 
+#include "audio.h"
 #include "dnssd.h"
 #include "fmp4.h"
 #include "sps.h"
@@ -29,6 +31,9 @@ static receiver_event_sink g_sink;
 static receiver_video_sink g_video_sink;
 static pthread_mutex_t g_mux_lock = PTHREAD_MUTEX_INITIALIZER;
 static fmp4_muxer *g_mux;
+static receiver_video_sink g_audio_sink;
+static pthread_mutex_t g_audio_lock = PTHREAD_MUTEX_INITIALIZER;
+static audio_pipeline *g_audio;
 
 static void emit(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 static pthread_mutex_t g_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -41,6 +46,23 @@ static atomic_int g_connections;
 
 void receiver_set_event_sink(receiver_event_sink sink) { g_sink = sink; }
 void receiver_set_video_sink(receiver_video_sink sink) { g_video_sink = sink; }
+void receiver_set_audio_sink(receiver_video_sink sink) { g_audio_sink = sink; }
+
+static void audio_output(void *ctx, enum fmp4_kind kind, uint8_t *data, size_t len) {
+    (void)ctx;
+    if (kind == FMP4_INIT) emit("{\"type\":\"audio_init\",\"bytes\":%zu}", len);
+    if (g_audio_sink) {
+        g_audio_sink(kind == FMP4_INIT ? 0 : 1, data, len);
+    } else {
+        free(data);
+    }
+}
+
+static void audio_reset_locked(void) {
+    pthread_mutex_lock(&g_audio_lock);
+    if (g_audio) audio_reset(g_audio);
+    pthread_mutex_unlock(&g_audio_lock);
+}
 
 static void mux_output(void *ctx, enum fmp4_kind kind, uint8_t *data, size_t len) {
     (void)ctx;
@@ -87,14 +109,40 @@ static char *json_escape(const char *s) {
     return out;
 }
 
+/* Development aid: every event is also appended to the app's scratch dir,
+ * because the system logger rate-limits the app once the media player gets
+ * chatty. Read it from the component shell: cat /scratch/rosellaview-events.log */
+#define JOURNAL "/scratch/rosellaview-events.log"
+#define JOURNAL_MAX (1024 * 1024)
+static void journal(const char *json) {
+    static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+    FILE *f;
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    pthread_mutex_lock(&lock);
+    if ((f = fopen(JOURNAL, "a")) != NULL) {
+        long size;
+        fprintf(f, "%ld.%03ld %s\n", (long)ts.tv_sec, ts.tv_nsec / 1000000, json);
+        size = ftell(f);
+        fclose(f);
+        if (size > JOURNAL_MAX) rename(JOURNAL, JOURNAL ".1"); /* /scratch is RAM: keep ~2 MB at most */
+    }
+    pthread_mutex_unlock(&lock);
+}
+
 static void emit(const char *fmt, ...) {
     va_list ap;
     char *json = NULL;
-    if (!g_sink) return;
     va_start(ap, fmt);
     if (vasprintf(&json, fmt, ap) < 0) json = NULL;
     va_end(ap);
-    if (json) g_sink(json);
+    if (!json) return;
+    journal(json);
+    if (g_sink) {
+        g_sink(json);
+    } else {
+        free(json);
+    }
 }
 
 static void emit_str(const char *type, const char *key, const char *value) {
@@ -121,6 +169,7 @@ static void cb_conn_init(void *cls) {
 static void cb_conn_destroy(void *cls) {
     (void)cls;
     mux_reset();
+    audio_reset_locked();
     emit("{\"type\":\"conn_destroy\",\"connections\":%d}", atomic_fetch_sub(&g_connections, 1) - 1);
 }
 
@@ -160,6 +209,9 @@ static void cb_audio_process(void *cls, raop_ntp_t *ntp, audio_decode_struct *da
     (void)ntp;
     atomic_fetch_add(&g_audio_packets, 1);
     atomic_fetch_add(&g_audio_bytes, (uint_fast64_t)data->data_len);
+    pthread_mutex_lock(&g_audio_lock);
+    if (g_audio) audio_push(g_audio, data->data, (size_t)data->data_len);
+    pthread_mutex_unlock(&g_audio_lock);
 }
 
 static void cb_video_pause(void *cls) { (void)cls; emit("{\"type\":\"video_pause\"}"); }
@@ -169,7 +221,10 @@ static void cb_video_flush(void *cls) {
     mux_reset();
     emit("{\"type\":\"video_flush\"}");
 }
-static void cb_audio_flush(void *cls) { (void)cls; }
+static void cb_audio_flush(void *cls) {
+    (void)cls;
+    audio_reset_locked();
+}
 
 static void cb_video_reset(void *cls, reset_type_t reset_type) {
     (void)cls;
@@ -234,8 +289,13 @@ static void cb_audio_set_progress(void *cls, uint32_t *start, uint32_t *curr, ui
 
 static void cb_audio_get_format(void *cls, unsigned char *ct, unsigned short *spf, bool *usingScreen,
                                 bool *isMedia, uint64_t *audioFormat) {
+    int rc = -1;
     (void)cls;
     atomic_store(&g_audio_ct, *ct);
+    pthread_mutex_lock(&g_audio_lock);
+    if (g_audio) rc = audio_set_format(g_audio, *ct);
+    pthread_mutex_unlock(&g_audio_lock);
+    if (rc != 0) emit("{\"type\":\"error\",\"where\":\"audio_set_format\",\"ct\":%u}", *ct);
     emit("{\"type\":\"audio_format\",\"ct\":%u,\"spf\":%u,\"using_screen\":%s,\"is_media\":%s,\"format\":\"0x%" PRIx64 "\"}",
          *ct, *spf, *usingScreen ? "true" : "false", *isMedia ? "true" : "false", *audioFormat);
 }
@@ -294,22 +354,47 @@ static void cb_get_custom_profile(void *cls, const char **custom_profile) {
 
 /* ---------- start / stop ---------- */
 
-/* A stable-per-boot hardware address for the device ID: wlan0's MAC if the
- * sandbox lets us read it, otherwise a random locally-administered one. */
-static void get_hw_addr(char out[6]) {
-    FILE *f = fopen("/sys/class/net/wlan0/address", "r");
-    unsigned int b[6];
+/* Persistent state lives in the app's data directory (/data, per-app ext4). */
+#define STATE_DIR "/data/rosellaview"
+#define IDENTITY_FILE STATE_DIR "/identity"
+#define PAIRING_KEY_FILE STATE_DIR "/pairing.key"
+
+/* The receiver's device ID: 6 random bytes (a locally administered MAC),
+ * created on first run and kept in IDENTITY_FILE so senders see the same
+ * receiver across launches. Falls back to a per-launch ID if /data isn't
+ * writable. */
+static void get_hw_addr(unsigned char out[6]) {
+    FILE *f = fopen(IDENTITY_FILE, "rb");
     if (f) {
-        int ok = fscanf(f, "%x:%x:%x:%x:%x:%x", &b[0], &b[1], &b[2], &b[3], &b[4], &b[5]) == 6;
+        size_t n = fread(out, 1, 6, f);
         fclose(f);
-        if (ok) {
-            for (int i = 0; i < 6; i++) out[i] = (char)b[i];
-            return;
-        }
+        if (n == 6) return;
     }
-    srand((unsigned)time(NULL) ^ (unsigned)(uintptr_t)out);
-    for (int i = 0; i < 6; i++) out[i] = (char)(rand() & 0xff);
-    out[0] = (char)((out[0] & 0xfe) | 0x02);
+    f = fopen("/dev/urandom", "rb");
+    if (!f || fread(out, 1, 6, f) != 6) {
+        srand((unsigned)time(NULL) ^ (unsigned)(uintptr_t)out);
+        for (int i = 0; i < 6; i++) out[i] = (unsigned char)(rand() & 0xff);
+    }
+    if (f) fclose(f);
+    out[0] = (unsigned char)((out[0] & 0xfe) | 0x02); /* unicast, locally administered */
+    mkdir(STATE_DIR, 0700);
+    if ((f = fopen(IDENTITY_FILE, "wb")) != NULL) {
+        fwrite(out, 1, 6, f);
+        fclose(f);
+    }
+}
+
+/* Four characters [A-Z0-9] derived deterministically from the device ID
+ * (FNV-1a, then base 36), so each receiver gets a stable, distinct name. */
+static void device_tag(const unsigned char id[6], char tag[5]) {
+    static const char digits[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    uint32_t h = 2166136261u;
+    for (int i = 0; i < 6; i++) h = (h ^ id[i]) * 16777619u;
+    for (int i = 0; i < 4; i++) {
+        tag[i] = digits[h % 36];
+        h /= 36;
+    }
+    tag[4] = 0;
 }
 
 /* Same advertised feature set as uxplay.cpp's start_dnssd(), with HLS off. */
@@ -320,9 +405,10 @@ static void set_features(dnssd_t *d) {
     for (int i = 32; i < 62; i++) dnssd_set_airplay_features(d, i, 0);
 }
 
-int receiver_start(const char *name) {
+int receiver_start(const char *base_name) {
     raop_callbacks_t cbs;
-    char hw[6], device_id[18];
+    unsigned char hw[6];
+    char device_id[18], tag[5], name[128];
     unsigned short tcp[3] = {0, 0, 0}, udp[3] = {0, 0, 0}, port;
     int err = 0;
 
@@ -341,13 +427,16 @@ int receiver_start(const char *name) {
     if (!g_mux) g_mux = fmp4_create(mux_output, NULL);
     fmp4_reset(g_mux);
     pthread_mutex_unlock(&g_mux_lock);
+    pthread_mutex_lock(&g_audio_lock);
+    if (!g_audio) g_audio = audio_create(audio_output, NULL);
+    pthread_mutex_unlock(&g_audio_lock);
 
     get_hw_addr(hw);
-    snprintf(device_id, sizeof device_id, "%02x:%02x:%02x:%02x:%02x:%02x", (unsigned char)hw[0],
-             (unsigned char)hw[1], (unsigned char)hw[2], (unsigned char)hw[3], (unsigned char)hw[4],
-             (unsigned char)hw[5]);
+    snprintf(device_id, sizeof device_id, "%02x:%02x:%02x:%02x:%02x:%02x", hw[0], hw[1], hw[2], hw[3], hw[4], hw[5]);
+    device_tag(hw, tag);
+    snprintf(name, sizeof name, "%s %s", base_name, tag);
 
-    g_dnssd = dnssd_init(name, (int)strlen(name), hw, sizeof hw, 0, &err);
+    g_dnssd = dnssd_init(name, (int)strlen(name), (const char *)hw, sizeof hw, 0, &err);
     if (!g_dnssd || err) {
         emit("{\"type\":\"error\",\"where\":\"dnssd_init\",\"code\":%d}", err);
         g_dnssd = NULL;
@@ -399,9 +488,10 @@ int receiver_start(const char *name) {
     }
     raop_set_log_callback(g_raop, cb_log, NULL);
     raop_set_log_level(g_raop, LOGGER_INFO);
-    /* nohold = 1: a new client may take over from the current one. Empty keyfile: a
-     * fresh pairing key per start (persisting it needs app storage, later phase). */
-    if (raop_init2(g_raop, 1, device_id, "")) {
+    /* nohold = 1: a new client may take over from the current one. The pairing
+     * key persists in /data so senders keep recognising this receiver. */
+    mkdir(STATE_DIR, 0700);
+    if (raop_init2(g_raop, 1, device_id, PAIRING_KEY_FILE)) {
         emit("{\"type\":\"error\",\"where\":\"raop_init2\"}");
         goto fail;
     }
@@ -465,6 +555,10 @@ void receiver_stop(void) {
         g_mux = NULL;
     }
     pthread_mutex_unlock(&g_mux_lock);
+    pthread_mutex_lock(&g_audio_lock);
+    audio_destroy(g_audio);
+    g_audio = NULL;
+    pthread_mutex_unlock(&g_audio_lock);
     if (g_dnssd) {
         dnssd_unregister_raop(g_dnssd);
         dnssd_unregister_airplay(g_dnssd);
@@ -477,14 +571,28 @@ void receiver_stop(void) {
 
 int receiver_is_running(void) { return g_raop != NULL; }
 
+int receiver_video_resync(void) {
+    int rc = -1;
+    pthread_mutex_lock(&g_mux_lock);
+    if (g_mux) rc = fmp4_resync(g_mux);
+    pthread_mutex_unlock(&g_mux_lock);
+    emit("{\"type\":\"video_resync\",\"replayed\":%s}", rc == 0 ? "true" : "false");
+    return rc;
+}
+
 char *receiver_stats_json(void) {
     char *json = NULL;
+    uint64_t keyframes = 0;
+    pthread_mutex_lock(&g_mux_lock);
+    if (g_mux) keyframes = fmp4_keyframes(g_mux);
+    pthread_mutex_unlock(&g_mux_lock);
     if (asprintf(&json,
                  "{\"running\":%s,\"connections\":%d,\"video_frames\":%" PRIuFAST64 ",\"video_bytes\":%" PRIuFAST64
-                 ",\"audio_packets\":%" PRIuFAST64 ",\"audio_bytes\":%" PRIuFAST64 ",\"audio_ct\":%d}",
+                 ",\"audio_packets\":%" PRIuFAST64 ",\"audio_bytes\":%" PRIuFAST64 ",\"audio_ct\":%d,\"keyframes\":%" PRIu64 "}",
                  g_raop ? "true" : "false", atomic_load(&g_connections), atomic_load(&g_video_frames),
                  atomic_load(&g_video_bytes), atomic_load(&g_audio_packets), atomic_load(&g_audio_bytes),
-                 atomic_load(&g_audio_ct)) < 0)
+                 atomic_load(&g_audio_ct), keyframes) < 0)
         json = NULL;
+    if (json && atomic_load(&g_connections) > 0) journal(json);
     return json;
 }

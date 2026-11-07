@@ -34,4 +34,32 @@ void fmp4_reset(fmp4_muxer *m);
  * first SPS/PPS are dropped. */
 void fmp4_push_h264(fmp4_muxer *m, const uint8_t *au, size_t len, uint64_t ts_ns);
 
+/* Keyframes seen since creation (diagnostics). */
+uint64_t fmp4_keyframes(const fmp4_muxer *m);
+
+/* Recovers a stalled player: re-emits the init segment, then every frame
+ * since the last keyframe with 1 ms durations so a fresh decoder rebuilds its
+ * references at once; live frames continue after them. Returns -1 if no
+ * complete GOP is cached (the next keyframe then starts a new init). */
+int fmp4_resync(fmp4_muxer *m);
+
+/* ---------- audio ---------- */
+
+enum fmp4_audio_codec { FMP4_AUDIO_FLAC, FMP4_AUDIO_AAC };
+
+typedef struct fmp4_audio fmp4_audio;
+
+fmp4_audio *fmp4_audio_create(fmp4_output out, void *ctx);
+void fmp4_audio_destroy(fmp4_audio *a);
+
+/* Starts a new stream: the next push emits an init segment first.
+ * FMP4_AUDIO_FLAC: `config` is the 34-byte STREAMINFO body.
+ * FMP4_AUDIO_AAC:  `config` is the AudioSpecificConfig. */
+void fmp4_audio_configure(fmp4_audio *a, enum fmp4_audio_codec codec, unsigned sample_rate, unsigned channels,
+                          const uint8_t *config, size_t config_len);
+
+/* One coded sample (a FLAC frame or an AAC access unit) lasting
+ * `duration` samples. */
+void fmp4_audio_push(fmp4_audio *a, const uint8_t *sample, size_t len, uint32_t duration);
+
 #endif

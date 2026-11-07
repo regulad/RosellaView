@@ -23,11 +23,21 @@ typedef void (*receiver_video_sink)(int kind, uint8_t *data, size_t len);
 
 void receiver_set_video_sink(receiver_video_sink sink);
 
-/* Starts mDNS advertisement and the AirPlay server under `name`.
+/* Mirrored/streamed audio as fragmented MP4, same contract as the video sink.
+ * A new init segment starts each audio stream. */
+void receiver_set_audio_sink(receiver_video_sink sink);
+
+/* Starts mDNS advertisement and the AirPlay server as "<base_name> <TAG>",
+ * where TAG is four characters derived from this device's persistent ID
+ * (the full name is reported in the "started" event).
  * Returns 0 on success, or a negative error code (see receiver.c). */
-int receiver_start(const char *name);
+int receiver_start(const char *base_name);
 void receiver_stop(void);
 int receiver_is_running(void);
+
+/* Asks the video muxer to replay the current GOP for a rebuilt player
+ * (see fmp4_resync). Returns 0 if a replay was sent. */
+int receiver_video_resync(void);
 
 /* Running counters since receiver_start(), as a JSON string (caller frees). */
 char *receiver_stats_json(void);

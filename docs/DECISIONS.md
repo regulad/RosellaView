@@ -49,3 +49,27 @@ id = "com.amazon.devconf.privilege.accessibility"
 ## D2. Test network: 802.11n on the lab AP (2026-11-06)
 
 The laptop's `create_ap` AP now runs with `IEEE80211N=1`, started via `create_ap.service` (not enabled at boot) instead of the Linux WiFi Hotspot GUI, which rewrote the config back to 802.11g. Throughput to the stick went from about 10 to 38 Mbit/s.
+
+## D3. Audio: decode, then FLAC verbatim frames in MSE (2026-11-07)
+
+**What iOS sends** (iPhone18,1, AirPlay/980.77.1), logged from `audio_get_format`:
+- Music only: ALAC 44.1 kHz/16-bit/stereo (`ct=2`, `audioFormat=0x40000`, 352 samples per packet).
+- Screen mirroring: AAC-ELD 44.1 kHz stereo (`ct=8`, `audioFormat=0x1000000`, 480 samples per packet).
+- Advertising only AAC-LC (`audioInputFormats`/`audioOutputFormats = 0x00C00000` in `/info`, via a local UxPlay patch) changed nothing; iOS chose the same codecs. The patch was reverted and not forked.
+
+**What Vega's MSE plays** (`isTypeSupported` plus real fMP4 fragments fed at real time, `~/vega-probe/mse-probe`):
+
+| Format | Result |
+|---|---|
+| AAC-ELD `mp4a.40.39` | not supported |
+| ALAC | not supported |
+| PCM `ipcm` | claimed supported, but fails with `MEDIA_ERR_DECODE` |
+| FLAC `fLaC` | plays (heard) |
+| AAC-LC `mp4a.40.2` | plays (heard) |
+
+**Decision:**
+- Decode ALAC and AAC-ELD with FFmpeg's `alac`/`aac` decoders (LGPL build, decoders only).
+- Wrap the PCM in FLAC frames with VERBATIM subframes: no prediction or entropy coding, just headers and CRCs, so it costs about as much as a copy.
+- Mux as a `fLaC` track in fragmented MP4, appended to a second `SourceBuffer` on the same `MediaSource` as the video so the player keeps A/V sync.
+- Pass AAC-LC (`ct=4`) through as `mp4a.40.2` if a sender ever uses it.
+- Fill silence while audio is idle, so the audio buffer never starves video playback.

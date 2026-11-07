@@ -28,6 +28,7 @@
 
 static napi_threadsafe_function g_events; /* JS listener, or NULL */
 static napi_threadsafe_function g_video;  /* JS video listener, or NULL */
+static napi_threadsafe_function g_audio;  /* JS audio listener, or NULL */
 
 typedef struct {
     int kind;
@@ -103,8 +104,7 @@ static void deliver_video(napi_env env, napi_value js_cb, void *context, void *d
     free(seg);
 }
 
-static void video_sink(int kind, uint8_t *data, size_t len) {
-    napi_threadsafe_function tsfn = g_video;
+static void send_segment(napi_threadsafe_function tsfn, int kind, uint8_t *data, size_t len) {
     video_segment *seg;
     if (!tsfn) {
         free(data);
@@ -119,6 +119,9 @@ static void video_sink(int kind, uint8_t *data, size_t len) {
         free(seg);
     }
 }
+
+static void video_sink(int kind, uint8_t *data, size_t len) { send_segment(g_video, kind, data, len); }
+static void audio_sink(int kind, uint8_t *data, size_t len) { send_segment(g_audio, kind, data, len); }
 
 /* Replaces *slot with a threadsafe function for argv[0] if it's a function. */
 static int replace_listener(napi_env env, napi_callback_info info, napi_threadsafe_function *slot,
@@ -149,6 +152,13 @@ static napi_value js_set_video_listener(napi_env env, napi_callback_info info) {
     return make_bool(env, ok);
 }
 
+/* setAudioListener(fn(kind, buffer) | null) */
+static napi_value js_set_audio_listener(napi_env env, napi_callback_info info) {
+    int ok = replace_listener(env, info, &g_audio, "RosellaViewAudio", deliver_video);
+    receiver_set_audio_sink(audio_sink);
+    return make_bool(env, ok);
+}
+
 /* setEventListener(fn | null) */
 static napi_value js_set_event_listener(napi_env env, napi_callback_info info) {
     int ok = replace_listener(env, info, &g_events, "RosellaViewEvents", deliver_event);
@@ -169,6 +179,12 @@ static napi_value js_stop(napi_env env, napi_callback_info info) {
     return make_bool(env, 1);
 }
 
+/* resyncVideo() → true if the current GOP was replayed */
+static napi_value js_resync_video(napi_env env, napi_callback_info info) {
+    (void)info;
+    return make_bool(env, receiver_video_resync() == 0);
+}
+
 static napi_value js_is_running(napi_env env, napi_callback_info info) {
     (void)info;
     return make_bool(env, receiver_is_running());
@@ -187,9 +203,11 @@ static napi_value module_init(napi_env env, napi_value exports) {
     napi_property_descriptor props[] = {
         {"setEventListener", NULL, js_set_event_listener, NULL, NULL, NULL, napi_default, NULL},
         {"setVideoListener", NULL, js_set_video_listener, NULL, NULL, NULL, napi_default, NULL},
+        {"setAudioListener", NULL, js_set_audio_listener, NULL, NULL, NULL, napi_default, NULL},
         {"start", NULL, js_start, NULL, NULL, NULL, napi_default, NULL},
         {"stop", NULL, js_stop, NULL, NULL, NULL, napi_default, NULL},
         {"isRunning", NULL, js_is_running, NULL, NULL, NULL, napi_default, NULL},
+        {"resyncVideo", NULL, js_resync_video, NULL, NULL, NULL, napi_default, NULL},
         {"getStats", NULL, js_get_stats, NULL, NULL, NULL, napi_default, NULL},
     };
     napi_define_properties(env, exports, sizeof props / sizeof props[0], props);

@@ -10,3 +10,6 @@
 [submodule "third_party/node-api-headers"]
 	path = third_party/node-api-headers
 	url = https://github.com/nodejs/node-api-headers.git
+[submodule "third_party/ffmpeg"]
+	path = third_party/ffmpeg
+	url = https://github.com/FFmpeg/FFmpeg.git
