@@ -9,6 +9,8 @@
  *   - napi_*_async_work aborts: use a pthread + napi_threadsafe_function.
  *   - napi_get_value_string_utf8 with a NULL buffer (length query) aborts:
  *     always pass a real buffer.
+ *   - napi_create_arraybuffer is "not implemented" (logged, no buffer):
+ *     use napi_create_external_arraybuffer.
  *
  * Copyright (C) 2026 Parker Wahle
  * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -16,6 +18,7 @@
 #define NAPI_VERSION 8
 #include <node_api.h>
 
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -24,6 +27,13 @@
 #define MAX_STRING_ARG 256
 
 static napi_threadsafe_function g_events; /* JS listener, or NULL */
+static napi_threadsafe_function g_video;  /* JS video listener, or NULL */
+
+typedef struct {
+    int kind;
+    uint8_t *data;
+    size_t len;
+} video_segment;
 
 static napi_value make_string(napi_env env, const char *s) {
     napi_value v;
@@ -66,27 +76,84 @@ static void event_sink(char *json) {
     if (!tsfn || napi_call_threadsafe_function(tsfn, json, napi_tsfn_nonblocking) != napi_ok) free(json);
 }
 
-/* setEventListener(fn | null) */
-static napi_value js_set_event_listener(napi_env env, napi_callback_info info) {
+/* ---------- video: mirroring thread → JS ---------- */
+
+static void free_segment_data(napi_env env, void *data, void *hint) {
+    (void)env;
+    (void)hint;
+    free(data);
+}
+
+static void deliver_video(napi_env env, napi_value js_cb, void *context, void *data) {
+    video_segment *seg = data;
+    uint8_t *bytes = seg->data;
+    (void)context;
+    if (env != NULL && js_cb != NULL) {
+        napi_value undefined, argv[2];
+        napi_get_undefined(env, &undefined);
+        napi_create_int32(env, seg->kind, &argv[0]);
+        /* napi_create_arraybuffer is unimplemented on Vega; the external variant
+         * works and hands the segment to JS without a copy. */
+        if (napi_create_external_arraybuffer(env, bytes, seg->len, free_segment_data, NULL, &argv[1]) == napi_ok) {
+            bytes = NULL; /* now owned by the ArrayBuffer's finalizer */
+            napi_call_function(env, undefined, js_cb, 2, argv, NULL);
+        }
+    }
+    free(bytes);
+    free(seg);
+}
+
+static void video_sink(int kind, uint8_t *data, size_t len) {
+    napi_threadsafe_function tsfn = g_video;
+    video_segment *seg;
+    if (!tsfn) {
+        free(data);
+        return;
+    }
+    seg = malloc(sizeof *seg);
+    seg->kind = kind;
+    seg->data = data;
+    seg->len = len;
+    if (napi_call_threadsafe_function(tsfn, seg, napi_tsfn_nonblocking) != napi_ok) {
+        free(data);
+        free(seg);
+    }
+}
+
+/* Replaces *slot with a threadsafe function for argv[0] if it's a function. */
+static int replace_listener(napi_env env, napi_callback_info info, napi_threadsafe_function *slot,
+                            const char *name, napi_threadsafe_function_call_js call_js) {
     size_t argc = 1;
-    napi_value argv[1], name;
+    napi_value argv[1];
     napi_valuetype t = napi_undefined;
-    napi_threadsafe_function old = g_events;
+    napi_threadsafe_function old = *slot;
 
     napi_get_cb_info(env, info, &argc, argv, NULL, NULL);
     if (argc >= 1) napi_typeof(env, argv[0], &t);
-    g_events = NULL;
+    *slot = NULL;
     if (old) napi_release_threadsafe_function(old, napi_tsfn_release);
     if (t == napi_function) {
         napi_threadsafe_function tsfn;
-        name = make_string(env, "RosellaViewEvents");
-        if (napi_create_threadsafe_function(env, argv[0], NULL, name, 0, 1, NULL, NULL, NULL, deliver_event,
-                                            &tsfn) == napi_ok) {
-            g_events = tsfn;
+        if (napi_create_threadsafe_function(env, argv[0], NULL, make_string(env, name), 0, 1, NULL, NULL, NULL,
+                                            call_js, &tsfn) == napi_ok) {
+            *slot = tsfn;
         }
     }
+    return *slot != NULL;
+}
+
+/* setVideoListener(fn(kind, buffer) | null) */
+static napi_value js_set_video_listener(napi_env env, napi_callback_info info) {
+    int ok = replace_listener(env, info, &g_video, "RosellaViewVideo", deliver_video);
+    receiver_set_video_sink(video_sink);
+    return make_bool(env, ok);
+}
+
+/* setEventListener(fn | null) */
+static napi_value js_set_event_listener(napi_env env, napi_callback_info info) {
+    int ok = replace_listener(env, info, &g_events, "RosellaViewEvents", deliver_event);
     receiver_set_event_sink(event_sink);
-    return make_bool(env, g_events != NULL);
+    return make_bool(env, ok);
 }
 
 /* start(name) → true on success (details arrive as events) */
@@ -119,6 +186,7 @@ static napi_value js_get_stats(napi_env env, napi_callback_info info) {
 static napi_value module_init(napi_env env, napi_value exports) {
     napi_property_descriptor props[] = {
         {"setEventListener", NULL, js_set_event_listener, NULL, NULL, NULL, napi_default, NULL},
+        {"setVideoListener", NULL, js_set_video_listener, NULL, NULL, NULL, napi_default, NULL},
         {"start", NULL, js_start, NULL, NULL, NULL, napi_default, NULL},
         {"stop", NULL, js_stop, NULL, NULL, NULL, napi_default, NULL},
         {"isRunning", NULL, js_is_running, NULL, NULL, NULL, napi_default, NULL},

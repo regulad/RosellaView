@@ -15,8 +15,10 @@ include(cmake/airplay.cmake)
 # for the OS's libkeplerscript.so (Node-API) is linked; the SDK's static
 # turbomoduleAPI/JsonContainer/Logger archives are not.
 add_library(RosellaView SHARED
+  src/fmp4.c
   src/module.c
   src/receiver.c
+  src/sps.c
 )
 target_include_directories(RosellaView PRIVATE ${RV_THIRD_PARTY}/node-api-headers/include)
 target_compile_definitions(RosellaView PRIVATE _GNU_SOURCE)

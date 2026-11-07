@@ -19,11 +19,18 @@
 #include <time.h>
 
 #include "dnssd.h"
+#include "fmp4.h"
+#include "sps.h"
 #include "logger.h"
 #include "raop.h"
 #include "stream.h"
 
 static receiver_event_sink g_sink;
+static receiver_video_sink g_video_sink;
+static pthread_mutex_t g_mux_lock = PTHREAD_MUTEX_INITIALIZER;
+static fmp4_muxer *g_mux;
+
+static void emit(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 static pthread_mutex_t g_lock = PTHREAD_MUTEX_INITIALIZER;
 static raop_t *g_raop;
 static dnssd_t *g_dnssd;
@@ -33,6 +40,33 @@ static atomic_int g_audio_ct;
 static atomic_int g_connections;
 
 void receiver_set_event_sink(receiver_event_sink sink) { g_sink = sink; }
+void receiver_set_video_sink(receiver_video_sink sink) { g_video_sink = sink; }
+
+static void mux_output(void *ctx, enum fmp4_kind kind, uint8_t *data, size_t len) {
+    (void)ctx;
+    if (kind == FMP4_INIT && g_mux) { /* called under g_mux_lock from fmp4_push_h264 */
+        uint8_t sps[256];
+        char hex[2 * sizeof sps + 1];
+        size_t n = fmp4_get_sender_sps(g_mux, sps, sizeof sps);
+        unsigned w = 0, h = 0;
+        for (size_t i = 0; i < n; i++) sprintf(hex + 2 * i, "%02x", sps[i]);
+        hex[2 * n] = 0;
+        sps_get_size(sps, n, &w, &h);
+        emit("{\"type\":\"video_init\",\"bytes\":%zu,\"width\":%u,\"height\":%u,\"sender_sps\":\"%s\"}", len, w, h,
+             hex);
+    }
+    if (g_video_sink) {
+        g_video_sink(kind == FMP4_INIT ? 0 : 1, data, len);
+    } else {
+        free(data);
+    }
+}
+
+static void mux_reset(void) {
+    pthread_mutex_lock(&g_mux_lock);
+    if (g_mux) fmp4_reset(g_mux);
+    pthread_mutex_unlock(&g_mux_lock);
+}
 
 /* Escapes `s` into a JSON string body (no quotes). Result is malloc'd. */
 static char *json_escape(const char *s) {
@@ -86,6 +120,7 @@ static void cb_conn_init(void *cls) {
 
 static void cb_conn_destroy(void *cls) {
     (void)cls;
+    mux_reset();
     emit("{\"type\":\"conn_destroy\",\"connections\":%d}", atomic_fetch_sub(&g_connections, 1) - 1);
 }
 
@@ -114,6 +149,10 @@ static void cb_video_process(void *cls, raop_ntp_t *ntp, video_decode_struct *da
              data->is_h265 ? "true" : "false", data->nal_count, data->data_len);
     }
     atomic_fetch_add(&g_video_bytes, (uint_fast64_t)data->data_len);
+    if (data->is_h265) return; /* H.265 isn't advertised; ignore it if it arrives */
+    pthread_mutex_lock(&g_mux_lock);
+    if (g_mux) fmp4_push_h264(g_mux, data->data, (size_t)data->data_len, data->ntp_time_remote);
+    pthread_mutex_unlock(&g_mux_lock);
 }
 
 static void cb_audio_process(void *cls, raop_ntp_t *ntp, audio_decode_struct *data) {
@@ -125,11 +164,16 @@ static void cb_audio_process(void *cls, raop_ntp_t *ntp, audio_decode_struct *da
 
 static void cb_video_pause(void *cls) { (void)cls; emit("{\"type\":\"video_pause\"}"); }
 static void cb_video_resume(void *cls) { (void)cls; emit("{\"type\":\"video_resume\"}"); }
-static void cb_video_flush(void *cls) { (void)cls; emit("{\"type\":\"video_flush\"}"); }
+static void cb_video_flush(void *cls) {
+    (void)cls;
+    mux_reset();
+    emit("{\"type\":\"video_flush\"}");
+}
 static void cb_audio_flush(void *cls) { (void)cls; }
 
 static void cb_video_reset(void *cls, reset_type_t reset_type) {
     (void)cls;
+    mux_reset();
     emit("{\"type\":\"video_reset\",\"reset_type\":%d}", (int)reset_type);
 }
 
@@ -137,6 +181,9 @@ static int cb_video_set_codec_and_size(void *cls, video_codec_t codec, unsigned 
                                        unsigned short height_source, unsigned short x_offset,
                                        unsigned short y_offset, unsigned short width, unsigned short height) {
     (void)cls;
+    pthread_mutex_lock(&g_mux_lock);
+    if (g_mux) fmp4_set_size(g_mux, width_source, height_source);
+    pthread_mutex_unlock(&g_mux_lock);
     emit("{\"type\":\"video_format\",\"codec\":\"%s\",\"source\":[%u,%u],\"offset\":[%u,%u],\"size\":[%u,%u]}",
          codec == VIDEO_CODEC_H264 ? "h264" : codec == VIDEO_CODEC_H265 ? "h265" : "unknown",
          width_source, height_source, x_offset, y_offset, width, height);
@@ -290,6 +337,11 @@ int receiver_start(const char *name) {
     atomic_store(&g_audio_bytes, 0);
     atomic_store(&g_connections, 0);
 
+    pthread_mutex_lock(&g_mux_lock);
+    if (!g_mux) g_mux = fmp4_create(mux_output, NULL);
+    fmp4_reset(g_mux);
+    pthread_mutex_unlock(&g_mux_lock);
+
     get_hw_addr(hw);
     snprintf(device_id, sizeof device_id, "%02x:%02x:%02x:%02x:%02x:%02x", (unsigned char)hw[0],
              (unsigned char)hw[1], (unsigned char)hw[2], (unsigned char)hw[3], (unsigned char)hw[4],
@@ -407,6 +459,12 @@ void receiver_stop(void) {
         raop_destroy(g_raop);
         g_raop = NULL;
     }
+    pthread_mutex_lock(&g_mux_lock);
+    if (g_mux) {
+        fmp4_destroy(g_mux);
+        g_mux = NULL;
+    }
+    pthread_mutex_unlock(&g_mux_lock);
     if (g_dnssd) {
         dnssd_unregister_raop(g_dnssd);
         dnssd_unregister_airplay(g_dnssd);

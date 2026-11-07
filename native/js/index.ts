@@ -3,8 +3,15 @@
 
 export type ReceiverEvent = {type: string; [key: string]: unknown};
 
+/** Fragmented-MP4 pieces of the mirrored video. */
+export enum SegmentKind {
+  Init = 0,
+  Media = 1,
+}
+
 interface NativeReceiver {
   setEventListener(listener: ((json: string) => void) | null): boolean;
+  setVideoListener(listener: ((kind: number, segment: ArrayBuffer) => void) | null): boolean;
   start(name: string): boolean;
   stop(): boolean;
   isRunning(): boolean;
@@ -21,6 +28,10 @@ const native: NativeReceiver = found;
 export const Receiver = {
   onEvent(listener: ((event: ReceiverEvent) => void) | null): void {
     native.setEventListener(listener ? (json) => listener(JSON.parse(json) as ReceiverEvent) : null);
+  },
+  /** Receives the mirrored video as fMP4: an init segment, then media segments. */
+  onVideo(listener: ((kind: SegmentKind, segment: ArrayBuffer) => void) | null): void {
+    native.setVideoListener(listener ? (kind, segment) => listener(kind as SegmentKind, segment) : null);
   },
   start: (name: string): boolean => native.start(name),
   stop: (): boolean => native.stop(),
