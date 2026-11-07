@@ -197,6 +197,19 @@ static napi_value js_resync_video(napi_env env, napi_callback_info info) {
     return make_bool(env, receiver_video_resync() == 0);
 }
 
+/* canResyncVideo() → true if resyncVideo() would replay a GOP */
+static napi_value js_can_resync_video(napi_env env, napi_callback_info info) {
+    (void)info;
+    return make_bool(env, receiver_video_can_resync());
+}
+
+/* note(msg): appends an app-side line to the development journal */
+static napi_value js_note(napi_env env, napi_callback_info info) {
+    char msg[MAX_STRING_ARG];
+    if (string_arg(env, info, msg, sizeof msg)) receiver_note(msg);
+    return make_bool(env, 1);
+}
+
 static napi_value js_is_running(napi_env env, napi_callback_info info) {
     (void)info;
     return make_bool(env, receiver_is_running());
@@ -220,6 +233,8 @@ static napi_value module_init(napi_env env, napi_value exports) {
         {"stop", NULL, js_stop, NULL, NULL, NULL, napi_default, NULL},
         {"isRunning", NULL, js_is_running, NULL, NULL, NULL, napi_default, NULL},
         {"resyncVideo", NULL, js_resync_video, NULL, NULL, NULL, napi_default, NULL},
+        {"canResyncVideo", NULL, js_can_resync_video, NULL, NULL, NULL, napi_default, NULL},
+        {"note", NULL, js_note, NULL, NULL, NULL, napi_default, NULL},
         {"setWatermark", NULL, js_set_watermark, NULL, NULL, NULL, napi_default, NULL},
         {"getStats", NULL, js_get_stats, NULL, NULL, NULL, napi_default, NULL},
     };

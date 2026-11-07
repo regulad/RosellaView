@@ -248,7 +248,7 @@ static void cb_audio_process(void *cls, raop_ntp_t *ntp, audio_decode_struct *da
     atomic_fetch_add(&g_audio_packets, 1);
     atomic_fetch_add(&g_audio_bytes, (uint_fast64_t)data->data_len);
     pthread_mutex_lock(&g_audio_lock);
-    if (g_audio) audio_push(g_audio, data->data, (size_t)data->data_len);
+    if (g_audio) audio_push(g_audio, data->data, (size_t)data->data_len, data->rtp_time);
     pthread_mutex_unlock(&g_audio_lock);
 }
 
@@ -625,18 +625,36 @@ int receiver_video_resync(void) {
     return rc;
 }
 
+int receiver_video_can_resync(void) {
+    int ok = 0;
+    pthread_mutex_lock(&g_mux_lock);
+    if (g_mux) ok = fmp4_can_resync(g_mux);
+    pthread_mutex_unlock(&g_mux_lock);
+    return ok;
+}
+
+void receiver_note(const char *msg) {
+    char *m = json_escape(msg), *json = NULL;
+    if (m && asprintf(&json, "{\"type\":\"app\",\"msg\":\"%s\"}", m) >= 0) journal(json);
+    free(json);
+    free(m);
+}
+
 char *receiver_stats_json(void) {
     char *json = NULL;
-    uint64_t keyframes = 0;
+    uint64_t keyframes = 0, concealed = 0;
     pthread_mutex_lock(&g_mux_lock);
     if (g_mux) keyframes = fmp4_keyframes(g_mux);
     pthread_mutex_unlock(&g_mux_lock);
+    pthread_mutex_lock(&g_audio_lock);
+    if (g_audio) concealed = audio_concealed(g_audio);
+    pthread_mutex_unlock(&g_audio_lock);
     if (asprintf(&json,
                  "{\"running\":%s,\"connections\":%d,\"video_frames\":%" PRIuFAST64 ",\"video_bytes\":%" PRIuFAST64
-                 ",\"audio_packets\":%" PRIuFAST64 ",\"audio_bytes\":%" PRIuFAST64 ",\"audio_ct\":%d,\"keyframes\":%" PRIu64 "}",
+                 ",\"audio_packets\":%" PRIuFAST64 ",\"audio_bytes\":%" PRIuFAST64 ",\"audio_ct\":%d,\"audio_concealed_ms\":%" PRIu64 ",\"keyframes\":%" PRIu64 "}",
                  g_raop ? "true" : "false", atomic_load(&g_connections), atomic_load(&g_video_frames),
                  atomic_load(&g_video_bytes), atomic_load(&g_audio_packets), atomic_load(&g_audio_bytes),
-                 atomic_load(&g_audio_ct), keyframes) < 0)
+                 atomic_load(&g_audio_ct), concealed * 1000 / 44100, keyframes) < 0)
         json = NULL;
     if (json && atomic_load(&g_connections) > 0) journal(json);
     return json;

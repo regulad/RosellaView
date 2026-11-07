@@ -23,8 +23,14 @@ void audio_destroy(audio_pipeline *p);
  * Returns 0, or -1 if the type isn't supported. */
 int audio_set_format(audio_pipeline *p, unsigned ct);
 
-/* One decrypted AirPlay audio packet. */
-void audio_push(audio_pipeline *p, const uint8_t *data, size_t len);
+/* One decrypted AirPlay audio packet with its RTP timestamp (in samples).
+ * Packets lost on the network leave a gap in the timestamps; it is filled with
+ * silence so the player's timeline (sequence mode) keeps pace with the sender
+ * and its buffer doesn't run dry. Late duplicates are dropped. */
+void audio_push(audio_pipeline *p, const uint8_t *data, size_t len, uint32_t rtp_time);
+
+/* Samples of silence inserted for lost packets so far. */
+uint64_t audio_concealed(const audio_pipeline *p);
 
 /* The spoken watermark: mono s16 44.1 kHz PCM (copied), mixed into decoded
  * audio every PREVIEW_INTERVAL while enabled. AAC-LC passthrough (ct 4)

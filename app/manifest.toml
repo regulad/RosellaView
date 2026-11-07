@@ -15,6 +15,10 @@ target = "2.0"
 [[needs.privilege]]
 id = "com.amazon.network.privilege.net-info"
 
+# In-app purchasing (the "remove watermark" entitlement).
+[[needs.module]]
+id = "/com.amazon.kepler.appstore.iap.purchase.core@IAppstoreIAPPurchaseCoreService"
+
 [wants]
 [[wants.service]]
 id = "com.amazon.network.service"
@@ -46,6 +50,13 @@ id = "com.amazon.devconf.privilege.accessibility"
 
 [[wants.module]]
 id = "/com.amazon.kepler.net.net_manager@INetManager"
+
+# IAP App Tester (sandbox mode) for development; inert without it installed.
+[[wants.service]]
+id = "com.amazon.iap.tester.service"
+
+[[wants.module]]
+id = "/com.amazonappstore.iap.tester@IIAPTesterUI"
 
 [components]
 [[components.interactive]]

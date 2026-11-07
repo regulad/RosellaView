@@ -5,20 +5,20 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import React, {useEffect, useRef, useState} from 'react';
-import {Dimensions, StyleSheet, Text, View} from 'react-native';
+import {AppState, Dimensions, Pressable, StyleSheet, Text, View} from 'react-native';
 import {KeplerVideoSurfaceView} from '@amazon-devices/react-native-w3cmedia';
 import {Receiver, ReceiverEvent, SegmentKind} from 'rosellaview-native';
 import {KeepAwake} from './KeepAwake';
 import {MirrorPlayer} from './MirrorPlayer';
+import {buyUnlock, isUnlocked} from './Purchases';
 import {Watermark} from './Watermark';
 
 // The receiver advertises as "RosellaView <TAG>", TAG derived from the
 // device's persistent ID (native/src/receiver.c).
 const RECEIVER_BASE_NAME = 'RosellaView';
-// Until the in-app purchase lands (Phase 4), the watermark is always on:
-// the bouncing plate over mirrored video, and a spoken "Preview." every
-// 5 s of audio, mirroring included (mixed natively, native/src/audio.c).
-const WATERMARK = true;
+// Until the unlock is purchased the watermark is on: the bouncing plate over
+// mirrored video, and a spoken "Preview." every 5 s of audio, mirroring
+// included (mixed natively, native/src/audio.c).
 const FLAC_MIME = 'audio/mp4; codecs="flac"';
 const AAC_LC_MIME = 'audio/mp4; codecs="mp4a.40.2"';
 
@@ -32,8 +32,15 @@ function airplayVolume(db: number): number {
 const SCREEN = Dimensions.get('window');
 
 // Receiver events go to the device log (loggingctl) for now; the device
-// logger keeps only the first line of each message.
-const log = (msg: string) => console.log(`ROSELLAVIEW ${msg}`);
+// logger keeps only the first line of each message and rate-limits the app,
+// so app-side messages also go to the native journal (receiver events are
+// journaled natively already).
+const log = (msg: string) => {
+  console.log(`ROSELLAVIEW ${msg}`);
+  if (!msg.startsWith('{')) {
+    Receiver.note(msg);
+  }
+};
 
 /** Largest box of the video's aspect ratio that fits the screen, centred. */
 function fit(w: number, h: number) {
@@ -51,6 +58,8 @@ export const App = () => {
   const [sender, setSender] = useState<string | null>(null);
   const [receiverName, setReceiverName] = useState(RECEIVER_BASE_NAME);
   const [audioOnly, setAudioOnly] = useState(false);
+  const [unlocked, setUnlocked] = useState(false);
+  const [buying, setBuying] = useState(false);
   const [videoSize, setVideoSize] = useState<[number, number]>([0, 0]);
   const player = useRef<MirrorPlayer | null>(null);
   const audio = useRef<MirrorPlayer | null>(null);
@@ -82,16 +91,20 @@ export const App = () => {
       audio.current?.push(segment, kind === SegmentKind.Media);
     });
 
-    // A stalled video player is rebuilt and fed the current GOP again.
+    // A stalled video player is rebuilt and fed the current GOP again, but
+    // only if that GOP is cached: iOS may send a single keyframe per session,
+    // and a new player can't show anything before a keyframe, so otherwise
+    // the player is kept (a frozen picture beats a black one) and nudged.
     let lastRecovery = 0;
-    const recoverVideo = () => {
+    const recoverVideo = (p: MirrorPlayer) => {
       const now = Date.now();
-      if (now - lastRecovery < 10000) {
+      if (now - lastRecovery >= 10000 && Receiver.canResyncVideo()) {
+        lastRecovery = now;
+        closePlayer();
+        log(`video resync -> ${Receiver.resyncVideo()}`);
         return;
       }
-      lastRecovery = now;
-      closePlayer();
-      log(`video resync -> ${Receiver.resyncVideo()}`);
+      p.kick();
     };
 
     Receiver.onVideo((kind, segment) => {
@@ -156,7 +169,6 @@ export const App = () => {
       }
     });
 
-    Receiver.setWatermark(WATERMARK);
     log(`start(${RECEIVER_BASE_NAME}) -> ${Receiver.start(RECEIVER_BASE_NAME)}`);
     keepAwake.current.set(true);
     const stats = setInterval(() => {
@@ -176,6 +188,44 @@ export const App = () => {
       keepAwake.current.set(false);
     };
   }, []);
+
+  // Entitlement: checked at launch and on every return to the foreground, so
+  // a purchase or refund made elsewhere is picked up without a restart.
+  useEffect(() => {
+    const refresh = () =>
+      isUnlocked(log)
+        .then((u) => {
+          log(`unlocked=${u}`);
+          setUnlocked(u);
+        })
+        .catch((e) => log(`entitlement check failed: ${String(e)}`));
+    refresh();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        refresh();
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
+  useEffect(() => {
+    Receiver.setWatermark(!unlocked);
+  }, [unlocked]);
+
+  const onRemoveWatermark = () => {
+    if (buying) {
+      return;
+    }
+    setBuying(true);
+    buyUnlock(log)
+      .then((ok) => {
+        if (ok) {
+          setUnlocked(true);
+        }
+      })
+      .catch((e) => log(`purchase failed: ${String(e)}`))
+      .finally(() => setBuying(false));
+  };
 
   // The silent keep-awake loop runs only while nothing is connected, so it
   // never competes with the real players for audio focus.
@@ -197,7 +247,7 @@ export const App = () => {
             player.current?.setSurface(null);
           }}
         />
-        {WATERMARK ? <Watermark /> : null}
+        {unlocked ? null : <Watermark />}
       </View>
     );
   }
@@ -218,6 +268,20 @@ export const App = () => {
       <Text style={styles.line}>Open AirPlay® and select</Text>
       <Text style={styles.name}>{receiverName}</Text>
       {sender ? <Text style={styles.subtle}>Connecting to {sender}…</Text> : null}
+      {unlocked ? null : (
+        // The only focusable element: unfocused until the first remote press,
+        // and pinned to the bottom so the instructions stay centred.
+        <Pressable
+          disabled={buying}
+          onPress={onRemoveWatermark}
+          style={({focused}) => [styles.button, focused && styles.buttonFocused]}>
+          {({focused}) => (
+            <Text style={[styles.buttonText, focused && styles.buttonTextFocused]}>
+              {buying ? 'Opening Appstore…' : 'Remove audiovisual watermark'}
+            </Text>
+          )}
+        </Pressable>
+      )}
     </View>
   );
 };
@@ -228,4 +292,16 @@ const styles = StyleSheet.create({
   line: {color: '#ddd', fontSize: 40},
   name: {color: '#fff', fontSize: 64, fontWeight: 'bold', marginTop: 12},
   subtle: {color: '#888', fontSize: 28, marginTop: 24},
+  button: {
+    position: 'absolute',
+    bottom: 72,
+    paddingHorizontal: 40,
+    paddingVertical: 16,
+    borderRadius: 40,
+    borderWidth: 3,
+    borderColor: '#666',
+  },
+  buttonFocused: {backgroundColor: '#fff', borderColor: '#fff'},
+  buttonText: {color: '#aaa', fontSize: 30},
+  buttonTextFocused: {color: '#000'},
 });

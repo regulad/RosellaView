@@ -44,8 +44,8 @@ export class MirrorPlayer {
   constructor(
     private readonly log: Log,
     private readonly stream: StreamKind = {kind: 'video'},
-    /** Called once if the playhead freezes while frames keep arriving. */
-    private readonly onStall?: () => void,
+    /** Called every STALL_MS while the playhead is frozen and frames keep arriving. */
+    private readonly onStall?: (p: MirrorPlayer) => void,
   ) {}
 
   private get isVideo(): boolean {
@@ -180,13 +180,18 @@ export class MirrorPlayer {
       return;
     }
     if (now - this.lastMove >= STALL_MS && this.appended - this.appendedAtMove >= STALL_MIN_FRAMES) {
-      this.log(`${this.stream.kind} stalled at ${t.toFixed(2)}s with ${this.appended - this.appendedAtMove} frames waiting`);
-      const cb = this.onStall;
-      if (this.watchdog) {
-        clearInterval(this.watchdog);
-        this.watchdog = null;
-      }
-      cb?.();
+      this.log(`${this.stream.kind} stalled: ${this.stats()}`);
+      this.lastMove = now; // at most one call per STALL_MS
+      this.appendedAtMove = this.appended;
+      this.onStall?.(this);
+    }
+  }
+
+  /** Nudges a stalled player without dropping its decoder state. */
+  kick(): void {
+    const vp = this.player;
+    if (vp && !this.closed) {
+      vp.play();
     }
   }
 

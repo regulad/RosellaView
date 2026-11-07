@@ -43,6 +43,11 @@ void receiver_set_watermark(int on);
 /* Asks the video muxer to replay the current GOP for a rebuilt player
  * (see fmp4_resync). Returns 0 if a replay was sent. */
 int receiver_video_resync(void);
+/* 1 if receiver_video_resync() would replay a GOP. */
+int receiver_video_can_resync(void);
+
+/* Appends an app-side note to the development journal (see journal()). */
+void receiver_note(const char *msg);
 
 /* Running counters since receiver_start(), as a JSON string (caller frees). */
 char *receiver_stats_json(void);

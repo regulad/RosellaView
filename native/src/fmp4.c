@@ -345,12 +345,11 @@ static void gop_add(fmp4_muxer *m, const buf_t *sample, int sync) {
 
 uint64_t fmp4_keyframes(const fmp4_muxer *m) { return m->keyframes; }
 
+int fmp4_can_resync(const fmp4_muxer *m) { return m->have_init && m->gop_valid && m->gop_len > 0; }
+
 int fmp4_resync(fmp4_muxer *m) {
     size_t pos = 0;
-    if (!m->have_init || !m->gop_valid || m->gop_len == 0) {
-        m->have_init = 0; /* start afresh at the next keyframe */
-        return -1;
-    }
+    if (!fmp4_can_resync(m)) return -1;
     emit_init(m);
     while (pos + 5 <= m->gop_len) {
         size_t len = (size_t)m->gop[pos] << 24 | (size_t)m->gop[pos + 1] << 16 | (size_t)m->gop[pos + 2] << 8 |

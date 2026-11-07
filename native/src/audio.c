@@ -39,6 +39,12 @@ static const uint8_t AAC_ELD_ASC[4] = {0xf8, 0xe8, 0x50, 0x00};
 
 #define PREVIEW_INTERVAL (5 * RATE) /* samples between spoken watermarks */
 #define PREVIEW_FIRST (2 * RATE)     /* the first comes this far into a stream */
+#define DUCK_FULL 1024               /* programme gain, Q10 */
+#define DUCK_LOW 307                 /* ~30% while the voice speaks */
+#define DUCK_STEP 2                  /* per sample: ~8 ms ramps, so ducking doesn't click */
+#define LIMIT_KNEE 24576             /* soft limiter knee (~-2.5 dBFS) */
+
+#define MAX_CONCEAL RATE /* gaps longer than this are a new timeline, not loss */
 
 struct audio_pipeline {
     fmp4_audio *mux;
@@ -55,6 +61,10 @@ struct audio_pipeline {
     int preview_enabled;
     size_t preview_pos;        /* < preview_len while the clip is playing */
     uint64_t preview_wait;     /* samples until the next clip starts */
+    int duck;                  /* current programme gain, Q10 */
+    int have_rtp;
+    uint32_t next_rtp;         /* RTP timestamp expected for the next packet */
+    uint64_t concealed;
 };
 
 static void close_decoder(audio_pipeline *p) {
@@ -85,6 +95,7 @@ audio_pipeline *audio_create(fmp4_output out, void *ctx) {
     p->pkt = av_packet_alloc();
     p->frame = av_frame_alloc();
     p->flac_buf = malloc(flac_max_frame_bytes(CHANNELS));
+    p->duck = DUCK_FULL;
     return p;
 }
 
@@ -119,31 +130,53 @@ void audio_set_preview_enabled(audio_pipeline *p, int enabled) {
     p->preview_enabled = enabled;
 }
 
+/* Above the knee, compresses smoothly towards full scale instead of clipping
+ * (hard clipping the boosted voice crackled). */
+static int16_t soft_limit(int m) {
+    int a = m < 0 ? -m : m;
+    if (a > LIMIT_KNEE) {
+        const int room = 32767 - LIMIT_KNEE;
+        a = LIMIT_KNEE + (int)((int64_t)(a - LIMIT_KNEE) * room / (a - LIMIT_KNEE + room));
+    }
+    return (int16_t)(m < 0 ? -a : a);
+}
+
 /* Mixes the spoken watermark into interleaved s16 frames in place: the voice
- * boosted ~3 dB (x1.4) over the programme ducked to 30%, clamped. */
+ * boosted ~3 dB (x1.4) over the programme, which ramps down to 30% while it
+ * speaks, through a soft limiter. */
 static void mix_preview(audio_pipeline *p, int16_t *pcm, size_t frames) {
-    if (!p->preview_enabled || !p->preview_len) return;
+    if (!p->preview_len || (!p->preview_enabled && p->duck == DUCK_FULL)) return;
     for (size_t i = 0; i < frames; i++) {
-        if (p->preview_pos >= p->preview_len) {
-            if (p->preview_wait > 0) {
-                p->preview_wait--;
-                continue;
+        int v = 0, speaking = 0;
+        if (p->preview_enabled) {
+            if (p->preview_pos >= p->preview_len) {
+                if (p->preview_wait > 0) {
+                    p->preview_wait--;
+                } else {
+                    p->preview_pos = 0;
+                    p->preview_wait = PREVIEW_INTERVAL - p->preview_len;
+                }
             }
-            p->preview_pos = 0;
-            p->preview_wait = PREVIEW_INTERVAL - p->preview_len;
+            if (p->preview_pos < p->preview_len) {
+                v = p->preview[p->preview_pos++] * 7 / 5;
+                speaking = 1;
+            }
         }
-        {
-            int v = p->preview[p->preview_pos++] * 7 / 5;
-            for (int c = 0; c < CHANNELS; c++) {
-                int m = pcm[i * CHANNELS + c] * 3 / 10 + v;
-                pcm[i * CHANNELS + c] = (int16_t)(m > 32767 ? 32767 : m < -32768 ? -32768 : m);
-            }
+        if (speaking && p->duck > DUCK_LOW) {
+            p->duck = p->duck - DUCK_STEP < DUCK_LOW ? DUCK_LOW : p->duck - DUCK_STEP;
+        } else if (!speaking && p->duck < DUCK_FULL) {
+            p->duck = p->duck + DUCK_STEP > DUCK_FULL ? DUCK_FULL : p->duck + DUCK_STEP;
+        }
+        if (v == 0 && p->duck == DUCK_FULL) continue;
+        for (int c = 0; c < CHANNELS; c++) {
+            pcm[i * CHANNELS + c] = soft_limit(pcm[i * CHANNELS + c] * p->duck / DUCK_FULL + v);
         }
     }
 }
 
 void audio_reset(audio_pipeline *p) {
     p->pcm_frames = 0;
+    p->have_rtp = 0;
     if (p->dec) avcodec_flush_buffers(p->dec);
 }
 
@@ -152,6 +185,7 @@ int audio_set_format(audio_pipeline *p, unsigned ct) {
     p->ct = 0;
     p->pcm_frames = 0;
     p->flac_frame = 0;
+    p->have_rtp = 0;
     switch (ct) {
     case 4:
         fmp4_audio_configure(p->mux, FMP4_AUDIO_AAC, RATE, CHANNELS, AAC_LC_ASC, sizeof AAC_LC_ASC);
@@ -225,23 +259,47 @@ static void queue_frame(audio_pipeline *p, const AVFrame *f) {
     }
 }
 
-void audio_push(audio_pipeline *p, const uint8_t *data, size_t len) {
+uint64_t audio_concealed(const audio_pipeline *p) { return p->concealed; }
+
+/* Fills a gap of `frames` lost samples with silence. */
+static void conceal(audio_pipeline *p, size_t frames) {
+    static const int16_t zeros[512 * CHANNELS];
+    p->concealed += frames;
+    while (frames > 0) {
+        size_t n = frames > 512 ? 512 : frames;
+        queue_pcm(p, zeros, n);
+        frames -= n;
+    }
+}
+
+void audio_push(audio_pipeline *p, const uint8_t *data, size_t len, uint32_t rtp_time) {
+    size_t frames = 0;
     if (!p->ct || len == 0) return;
     if (p->ct == 4) {
         fmp4_audio_push(p->mux, data, len, AAC_LC_FRAME);
         return;
     }
-    if (p->ct == 1) {
-        queue_pcm(p, (const int16_t *)data, len / (CHANNELS * sizeof(int16_t)));
-        return;
+    if (p->have_rtp) {
+        int32_t gap = (int32_t)(rtp_time - p->next_rtp);
+        if (gap < 0 && gap > -MAX_CONCEAL) return; /* late or duplicate: already covered */
+        if (gap > 0 && gap <= MAX_CONCEAL) conceal(p, (size_t)gap);
     }
-    if (!p->dec) return;
-    av_packet_unref(p->pkt);
-    if (av_new_packet(p->pkt, (int)len) < 0) return;
-    memcpy(p->pkt->data, data, len);
-    if (avcodec_send_packet(p->dec, p->pkt) < 0) return;
-    while (avcodec_receive_frame(p->dec, p->frame) == 0) {
-        queue_frame(p, p->frame);
-        av_frame_unref(p->frame);
+    if (p->ct == 1) {
+        frames = len / (CHANNELS * sizeof(int16_t));
+        queue_pcm(p, (const int16_t *)data, frames);
+    } else if (p->dec) {
+        av_packet_unref(p->pkt);
+        if (av_new_packet(p->pkt, (int)len) < 0) return;
+        memcpy(p->pkt->data, data, len);
+        if (avcodec_send_packet(p->dec, p->pkt) < 0) return;
+        while (avcodec_receive_frame(p->dec, p->frame) == 0) {
+            frames += (size_t)p->frame->nb_samples;
+            queue_frame(p, p->frame);
+            av_frame_unref(p->frame);
+        }
+    }
+    if (frames > 0) {
+        p->have_rtp = 1;
+        p->next_rtp = rtp_time + (uint32_t)frames;
     }
 }
