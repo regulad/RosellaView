@@ -18,7 +18,10 @@ interface NativeReceiver {
   isRunning(): boolean;
   resyncVideo(): boolean;
   canResyncVideo(): boolean;
-  note(msg: string): boolean;
+  setSentryEnvelopeListener(listener: ((kind: number, envelope: ArrayBuffer) => void) | null): boolean;
+  sentryInit(dsn: string, release: string, dist: string, environment: string): boolean;
+  takeDevFlag(name: string): boolean;
+  crashForTest(): boolean;
   setWatermark(on: boolean): boolean;
   getStats(): string;
 }
@@ -49,8 +52,19 @@ export const Receiver = {
   resyncVideo: (): boolean => native.resyncVideo(),
   /** Whether resyncVideo() has a GOP to replay (iOS may send only one keyframe per session). */
   canResyncVideo: (): boolean => native.canResyncVideo(),
-  /** Appends a line to the development journal (/scratch/rosellaview-events.log). */
-  note: (msg: string): boolean => native.note(msg),
+  /**
+   * Native crash reporting (sentry-native). Set the envelope listener first:
+   * reports of a crash in the previous run are sent during init.
+   */
+  onSentryEnvelope(listener: ((envelope: ArrayBuffer) => void) | null): void {
+    native.setSentryEnvelopeListener(listener ? (_kind, envelope) => listener(envelope) : null);
+  },
+  sentryInit: (dsn: string, release: string, dist: string, environment: string): boolean =>
+    native.sentryInit(dsn, release, dist, environment),
+  /** Development: true once if /scratch/dev-<name> exists (create it from the component shell). */
+  takeDevFlag: (name: string): boolean => native.takeDevFlag(name),
+  /** Development: crashes the native module, to test crash reporting. */
+  crashForTest: (): boolean => native.crashForTest(),
   /** Audio carries a spoken "Preview." every 5 s while on (the default). */
   setWatermark: (on: boolean): boolean => native.setWatermark(on),
   stats: (): Record<string, unknown> => JSON.parse(native.getStats()) as Record<string, unknown>,

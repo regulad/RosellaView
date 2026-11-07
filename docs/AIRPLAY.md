@@ -4,7 +4,8 @@ These are findings about AirPlay senders and libairplay (UxPlay's `lib/`), seen 
 
 ## libairplay (UxPlay `lib/`)
 
-- We pin UxPlay master (`05b0275`) because the built-in `lib/mdnsd` responder isn't in the v1.73.7 release. It replaces Avahi/Bonjour, which an app can't reach on Vega anyway.
+- We build from our fork, `regulad/UxPlay`, branch `rosella`. It's based on UxPlay master (`05b0275`) because the built-in `lib/mdnsd` responder isn't in the v1.73.7 release; mdnsd replaces Avahi/Bonjour, which an app can't reach on Vega anyway. The fork adds one thing: a `report_client_details` callback, for the sender's OS and AirPlay versions.
+- **The client's SETUP request** carries `osName`, `osVersion`, `osBuildVersion`, `sourceVersion`, `model`, `name`, `deviceID`, `macAddress`, `sessionUUID`, `timingProtocol` and `isScreenMirroringSession`. Upstream passes on only `model`, `name` and `deviceID` (`report_client_request`).
 - **Video** arrives as H.264 Annex-B access units with SPS/PPS in-band. `ntp_time_remote` is the sender's timestamp, in ns.
 - **Audio** arrives as decrypted packets in `audio_decode_struct`, with `rtp_time` (in samples, 44.1 kHz) and `seqnum`. Lost packets show up only as gaps in `rtp_time`. Resend requests don't always fill them in time.
 - **Rotation:** when the phone rotates, the SPS changes in-band and libairplay doesn't call `video_set_codec_and_size` again. Take the picture size from the SPS.

@@ -46,8 +46,11 @@ int receiver_video_resync(void);
 /* 1 if receiver_video_resync() would replay a GOP. */
 int receiver_video_can_resync(void);
 
-/* Appends an app-side note to the development journal (see journal()). */
-void receiver_note(const char *msg);
+/* Development hooks: removes /scratch/dev-<name> and returns 1 if it existed
+ * (create it from the component shell); and a deliberate native crash, to
+ * check that crash reports arrive. */
+int receiver_take_dev_flag(const char *name);
+void receiver_crash_for_test(void);
 
 /* Running counters since receiver_start(), as a JSON string (caller frees). */
 char *receiver_stats_json(void);

@@ -1,12 +1,12 @@
 import { AppRegistry, LogBox } from 'react-native';
 import { App } from './src/App';
-import { installCrashJournal } from './src/CrashJournal';
+import { initSentry } from './src/Sentry';
 import { name as appName } from './app.json';
 
 // Temporary workaround for problem with nested text
 // not working currently.
 LogBox.ignoreAllLogs();
 
-installCrashJournal();
+initSentry();
 
 AppRegistry.registerComponent(appName, () => App);

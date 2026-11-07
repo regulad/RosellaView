@@ -11,6 +11,7 @@ include(cmake/openssl.cmake)
 include(cmake/libplist.cmake)
 include(cmake/airplay.cmake)
 include(cmake/ffmpeg.cmake)
+include(cmake/sentry.cmake)
 
 # Pure Node-API module: no Amazon SDK code is compiled in. Only the link stub
 # for the OS's libkeplerscript.so (Node-API) is linked; the SDK's static
@@ -21,16 +22,21 @@ add_library(RosellaView SHARED
   src/fmp4.c
   src/module.c
   src/receiver.c
+  src/sentry.c
   src/sps.c
 )
 target_include_directories(RosellaView PRIVATE ${RV_THIRD_PARTY}/node-api-headers/include)
 target_compile_definitions(RosellaView PRIVATE _GNU_SOURCE)
-set_target_properties(RosellaView PROPERTIES C_VISIBILITY_PRESET hidden)
+# Link with the C driver even though sentry-native brings C++: the Vega
+# toolchain defines its link rule (strip + debug file) for C only, and its C
+# flags already link libc++ statically.
+set_target_properties(RosellaView PROPERTIES C_VISIBILITY_PRESET hidden LINKER_LANGUAGE C)
 
 find_package(turbomoduleAPI CONFIG REQUIRED)
 target_link_libraries(RosellaView PRIVATE
   rosella::airplay
   rosella::avcodec
+  sentry::sentry
   turbomoduleAPI::napiStub
   pthread
 )

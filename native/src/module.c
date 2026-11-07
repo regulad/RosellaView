@@ -24,12 +24,14 @@
 #include <string.h>
 
 #include "receiver.h"
+#include "sentry.h"
 
 #define MAX_STRING_ARG 256
 
 static napi_threadsafe_function g_events; /* JS listener, or NULL */
 static napi_threadsafe_function g_video;  /* JS video listener, or NULL */
 static napi_threadsafe_function g_audio;  /* JS audio listener, or NULL */
+static napi_threadsafe_function g_sentry; /* JS envelope poster, or NULL */
 
 typedef struct {
     int kind;
@@ -49,16 +51,20 @@ static napi_value make_bool(napi_env env, int b) {
     return v;
 }
 
-/* Copies the first argument into `buf` if it is a string; returns 0 if absent. */
-static int string_arg(napi_env env, napi_callback_info info, char *buf, size_t len) {
-    size_t argc = 1, copied = 0;
-    napi_value argv[1];
+/* Copies string argument `index` into `buf`; returns 0 if absent or not a string. */
+static int string_arg_at(napi_env env, napi_callback_info info, size_t index, char *buf, size_t len) {
+    size_t argc = 8, copied = 0;
+    napi_value argv[8];
     napi_valuetype t;
-    if (napi_get_cb_info(env, info, &argc, argv, NULL, NULL) != napi_ok || argc < 1) return 0;
-    if (napi_typeof(env, argv[0], &t) != napi_ok || t != napi_string) return 0;
-    if (napi_get_value_string_utf8(env, argv[0], buf, len, &copied) != napi_ok) return 0;
+    if (napi_get_cb_info(env, info, &argc, argv, NULL, NULL) != napi_ok || argc <= index) return 0;
+    if (napi_typeof(env, argv[index], &t) != napi_ok || t != napi_string) return 0;
+    if (napi_get_value_string_utf8(env, argv[index], buf, len, &copied) != napi_ok) return 0;
     buf[copied < len ? copied : len - 1] = '\0'; /* Vega's copy isn't NUL-terminated */
     return 1;
+}
+
+static int string_arg(napi_env env, napi_callback_info info, char *buf, size_t len) {
+    return string_arg_at(env, info, 0, buf, len);
 }
 
 /* ---------- events: libairplay threads → JS ---------- */
@@ -124,6 +130,7 @@ static void send_segment(napi_threadsafe_function tsfn, int kind, uint8_t *data,
 
 static void video_sink(int kind, uint8_t *data, size_t len) { send_segment(g_video, kind, data, len); }
 static void audio_sink(int kind, uint8_t *data, size_t len) { send_segment(g_audio, kind, data, len); }
+static void sentry_sink(uint8_t *data, size_t len) { send_segment(g_sentry, 0, data, len); }
 
 /* Replaces *slot with a threadsafe function for argv[0] if it's a function. */
 static int replace_listener(napi_env env, napi_callback_info info, napi_threadsafe_function *slot,
@@ -204,11 +211,34 @@ static napi_value js_can_resync_video(napi_env env, napi_callback_info info) {
     return make_bool(env, receiver_video_can_resync());
 }
 
-/* note(msg): appends an app-side line to the development journal */
-static napi_value js_note(napi_env env, napi_callback_info info) {
-    char msg[1024]; /* room for an error and a few stack frames */
-    if (string_arg(env, info, msg, sizeof msg)) receiver_note(msg);
-    return make_bool(env, 1);
+/* setSentryEnvelopeListener(fn(kind, buffer) | null): receives native envelopes to post */
+static napi_value js_set_sentry_listener(napi_env env, napi_callback_info info) {
+    int ok = replace_listener(env, info, &g_sentry, "RosellaViewSentry", deliver_video);
+    rv_sentry_set_sink(sentry_sink);
+    return make_bool(env, ok);
+}
+
+/* sentryInit(dsn, release, dist, environment) → true once native crash handling runs */
+static napi_value js_sentry_init(napi_env env, napi_callback_info info) {
+    char dsn[MAX_STRING_ARG], release[MAX_STRING_ARG], dist[MAX_STRING_ARG], environment[MAX_STRING_ARG];
+    if (!string_arg_at(env, info, 0, dsn, sizeof dsn) || !string_arg_at(env, info, 1, release, sizeof release) ||
+        !string_arg_at(env, info, 2, dist, sizeof dist) ||
+        !string_arg_at(env, info, 3, environment, sizeof environment))
+        return make_bool(env, 0);
+    return make_bool(env, rv_sentry_init(dsn, release, dist, environment) == 0);
+}
+
+/* takeDevFlag(name) → true if /scratch/dev-<name> existed (it's removed) */
+static napi_value js_take_dev_flag(napi_env env, napi_callback_info info) {
+    char name[64];
+    return make_bool(env, string_arg(env, info, name, sizeof name) && receiver_take_dev_flag(name));
+}
+
+/* crashForTest(): a deliberate native crash */
+static napi_value js_crash_for_test(napi_env env, napi_callback_info info) {
+    (void)info;
+    receiver_crash_for_test();
+    return make_bool(env, 0);
 }
 
 static napi_value js_is_running(napi_env env, napi_callback_info info) {
@@ -235,7 +265,10 @@ static napi_value module_init(napi_env env, napi_value exports) {
         {"isRunning", NULL, js_is_running, NULL, NULL, NULL, napi_default, NULL},
         {"resyncVideo", NULL, js_resync_video, NULL, NULL, NULL, napi_default, NULL},
         {"canResyncVideo", NULL, js_can_resync_video, NULL, NULL, NULL, napi_default, NULL},
-        {"note", NULL, js_note, NULL, NULL, NULL, napi_default, NULL},
+        {"setSentryEnvelopeListener", NULL, js_set_sentry_listener, NULL, NULL, NULL, napi_default, NULL},
+        {"sentryInit", NULL, js_sentry_init, NULL, NULL, NULL, napi_default, NULL},
+        {"takeDevFlag", NULL, js_take_dev_flag, NULL, NULL, NULL, napi_default, NULL},
+        {"crashForTest", NULL, js_crash_for_test, NULL, NULL, NULL, napi_default, NULL},
         {"setWatermark", NULL, js_set_watermark, NULL, NULL, NULL, napi_default, NULL},
         {"getStats", NULL, js_get_stats, NULL, NULL, NULL, napi_default, NULL},
     };

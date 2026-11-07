@@ -10,6 +10,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import {AudioPlayer, MediaSource, VideoPlayer} from '@amazon-devices/react-native-w3cmedia';
+import {warn} from './Telemetry';
 
 // The decoder reconfigures from each init segment's avcC, so a generic
 // High-profile type is enough to create the SourceBuffer.
@@ -60,7 +61,7 @@ export class MirrorPlayer {
       return;
     }
     this.player = vp;
-    vp.addEventListener('error', () => this.log(`player error ${JSON.stringify(vp.error)}`));
+    vp.addEventListener('error', () => warn(`${this.stream.kind} player error`, {error: JSON.stringify(vp.error)}));
     const ms = new MediaSource();
     this.source = ms;
     const opened = new Promise<void>((resolve) => ms.addEventListener('sourceopen', () => resolve()));
@@ -75,7 +76,7 @@ export class MirrorPlayer {
     const sb = ms.addSourceBuffer(this.stream.kind === 'video' ? VIDEO_MIME : this.stream.mime);
     sb.mode = 'sequence';
     sb.addEventListener('updateend', () => this.onUpdateEnd());
-    sb.addEventListener('error', () => this.log('sourcebuffer error'));
+    sb.addEventListener('error', () => warn(`${this.stream.kind} sourcebuffer error`));
     this.buffer = sb;
     this.log(`${this.stream.kind} player open`);
     if (this.onStall) {
@@ -144,7 +145,7 @@ export class MirrorPlayer {
       this.appended++;
     } catch (e) {
       this.busy = false;
-      this.log(`appendBuffer threw: ${String(e)}`);
+      warn(`${this.stream.kind} appendBuffer threw`, {error: String(e)});
     }
   }
 
@@ -193,6 +194,16 @@ export class MirrorPlayer {
     if (vp && !this.closed) {
       vp.play();
     }
+  }
+
+  metrics(): {appended: number; aheadMs: number; queue: number; readyState: number} | null {
+    const vp = this.player;
+    if (!vp) {
+      return null;
+    }
+    const b = vp.buffered;
+    const end = b && b.length ? b.end(b.length - 1) : vp.currentTime;
+    return {appended: this.appended, aheadMs: Math.round((end - vp.currentTime) * 1000), queue: this.queue.length, readyState: vp.readyState};
   }
 
   stats(): string {

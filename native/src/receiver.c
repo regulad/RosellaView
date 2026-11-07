@@ -9,9 +9,7 @@
 #include "receiver.h"
 
 #include <inttypes.h>
-#include <fcntl.h>
 #include <pthread.h>
-#include <signal.h>
 #include <stdarg.h>
 #include <stdatomic.h>
 #include <stdbool.h>
@@ -25,6 +23,7 @@
 #include "audio.h"
 #include "dnssd.h"
 #include "fmp4.h"
+#include "sentry.h"
 #include "sps.h"
 #include "logger.h"
 #include "raop.h"
@@ -150,71 +149,6 @@ static char *json_escape(const char *s) {
     return out;
 }
 
-/* Development aid: every event is also appended to the app's scratch dir,
- * because the system logger rate-limits the app once the media player gets
- * chatty. Read it from the component shell: cat /scratch/rosellaview-events.log */
-#define JOURNAL "/scratch/rosellaview-events.log"
-#define JOURNAL_MAX (4 * 1024 * 1024) /* an overnight run of 5 s stats is ~1.5 MB */
-static void journal(const char *json) {
-    static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
-    FILE *f;
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    pthread_mutex_lock(&lock);
-    if ((f = fopen(JOURNAL, "a")) != NULL) {
-        long size;
-        fprintf(f, "%ld.%03ld %s\n", (long)ts.tv_sec, ts.tv_nsec / 1000000, json);
-        size = ftell(f);
-        fclose(f);
-        if (size > JOURNAL_MAX) rename(JOURNAL, JOURNAL ".1"); /* /scratch is RAM: keep ~8 MB at most */
-    }
-    pthread_mutex_unlock(&lock);
-}
-
-/* Fatal signals: note the signal in the journal (async-signal-safe: open and
- * write only), then hand over to the handler that was there before, which is
- * the OS crash reporter's. */
-static const int FATAL_SIGNALS[] = {SIGSEGV, SIGABRT, SIGBUS, SIGILL, SIGFPE};
-static struct sigaction g_prev_sig[sizeof FATAL_SIGNALS / sizeof *FATAL_SIGNALS];
-
-static void on_fatal_signal(int sig, siginfo_t *info, void *uc) {
-    char line[] = "0000000000.000 {\"type\":\"fatal_signal\",\"signal\":00}\n";
-    char *p = strstr(line, "\"signal\":") + 9;
-    time_t now = time(NULL);
-    int fd;
-    for (int i = 9; i >= 0; i--, now /= 10) line[i] = (char)('0' + now % 10);
-    p[0] = (char)('0' + sig / 10 % 10);
-    p[1] = (char)('0' + sig % 10);
-    if ((fd = open(JOURNAL, O_WRONLY | O_APPEND | O_CREAT, 0644)) >= 0) {
-        ssize_t r = write(fd, line, sizeof line - 1);
-        (void)r;
-        close(fd);
-    }
-    for (size_t i = 0; i < sizeof FATAL_SIGNALS / sizeof *FATAL_SIGNALS; i++) {
-        if (FATAL_SIGNALS[i] != sig) continue;
-        sigaction(sig, &g_prev_sig[i], NULL);
-        if (g_prev_sig[i].sa_flags & SA_SIGINFO) {
-            if (g_prev_sig[i].sa_sigaction) g_prev_sig[i].sa_sigaction(sig, info, uc);
-        } else if (g_prev_sig[i].sa_handler != SIG_DFL && g_prev_sig[i].sa_handler != SIG_IGN) {
-            g_prev_sig[i].sa_handler(sig);
-        }
-        break;
-    }
-    raise(sig); /* if the previous handler returned */
-}
-
-static void install_signal_journal(void) {
-    static int installed;
-    struct sigaction sa;
-    if (installed) return;
-    installed = 1;
-    memset(&sa, 0, sizeof sa);
-    sa.sa_sigaction = on_fatal_signal;
-    sa.sa_flags = SA_SIGINFO | SA_ONSTACK;
-    sigemptyset(&sa.sa_mask);
-    for (size_t i = 0; i < sizeof FATAL_SIGNALS / sizeof *FATAL_SIGNALS; i++) sigaction(FATAL_SIGNALS[i], &sa, &g_prev_sig[i]);
-}
-
 static void emit(const char *fmt, ...) {
     va_list ap;
     char *json = NULL;
@@ -222,7 +156,7 @@ static void emit(const char *fmt, ...) {
     if (vasprintf(&json, fmt, ap) < 0) json = NULL;
     va_end(ap);
     if (!json) return;
-    journal(json);
+    rv_sentry_breadcrumb("receiver", json);
     if (g_sink) {
         g_sink(json);
     } else {
@@ -238,9 +172,17 @@ static void emit_str(const char *type, const char *key, const char *value) {
 
 /* ---------- libairplay callbacks ---------- */
 
+#define USER_AGENT_PREFIX "Client identified as User-Agent: "
+
 static void cb_log(void *cls, int level, const char *msg) {
     char *m;
     (void)cls;
+    if (strncmp(msg, USER_AGENT_PREFIX, strlen(USER_AGENT_PREFIX)) == 0) {
+        /* The sender's AirPlay version ("AirPlay/980.77.1") isn't reported any other way. */
+        const char *ua = msg + strlen(USER_AGENT_PREFIX);
+        rv_sentry_set_tag("sender.user_agent", ua);
+        emit_str("client_user_agent", "user_agent", ua);
+    }
     m = json_escape(msg);
     emit("{\"type\":\"log\",\"level\":%d,\"msg\":\"%s\"}", level, m);
     free(m);
@@ -269,10 +211,38 @@ static void cb_report_client_request(void *cls, char *deviceid, char *model, cha
     char *d = json_escape(deviceid), *m = json_escape(model), *n = json_escape(name);
     (void)cls;
     *admit = true;
+    {
+        const char *pairs[] = {"device_id", deviceid, "model", model, "name", name};
+        rv_sentry_set_context("sender", pairs, 3);
+        rv_sentry_set_tag("sender.model", model);
+    }
     emit("{\"type\":\"client_request\",\"deviceid\":\"%s\",\"model\":\"%s\",\"name\":\"%s\"}", d, m, n);
     free(d);
     free(m);
     free(n);
+}
+
+/* From our UxPlay fork (regulad/UxPlay, branch rosella). */
+static void cb_report_client_details(void *cls, const char *os_name, const char *os_version,
+                                     const char *os_build_version, const char *source_version,
+                                     const char *mac_address) {
+    char *on = json_escape(os_name ? os_name : ""), *ov = json_escape(os_version ? os_version : ""),
+         *ob = json_escape(os_build_version ? os_build_version : ""),
+         *sv = json_escape(source_version ? source_version : ""), *mac = json_escape(mac_address ? mac_address : "");
+    const char *os_pairs[] = {"name", os_name, "version", os_version, "build", os_build_version};
+    (void)cls;
+    rv_sentry_set_context("sender_os", os_pairs, 3);
+    rv_sentry_set_tag("sender.os", os_name);
+    rv_sentry_set_tag("sender.os_version", os_version);
+    rv_sentry_set_tag("sender.airplay_version", source_version);
+    emit("{\"type\":\"client_details\",\"os_name\":\"%s\",\"os_version\":\"%s\",\"os_build_version\":\"%s\","
+         "\"source_version\":\"%s\",\"mac_address\":\"%s\"}",
+         on, ov, ob, sv, mac);
+    free(on);
+    free(ov);
+    free(ob);
+    free(sv);
+    free(mac);
 }
 
 static void cb_video_process(void *cls, raop_ntp_t *ntp, video_decode_struct *data) {
@@ -495,7 +465,6 @@ static void set_features(dnssd_t *d) {
 }
 
 int receiver_start(const char *base_name) {
-    install_signal_journal();
     raop_callbacks_t cbs;
     unsigned char hw[6];
     char device_id[18], tag[5], name[128];
@@ -561,6 +530,7 @@ int receiver_start(const char *base_name) {
     cbs.audio_get_format = cb_audio_get_format;
     cbs.mirror_video_running = cb_mirror_video_running;
     cbs.report_client_request = cb_report_client_request;
+    cbs.report_client_details = cb_report_client_details;
     cbs.display_pin = cb_display_pin;
     cbs.register_client = cb_register_client;
     cbs.check_register = cb_check_register;
@@ -681,11 +651,15 @@ int receiver_video_can_resync(void) {
     return ok;
 }
 
-void receiver_note(const char *msg) {
-    char *m = json_escape(msg), *json = NULL;
-    if (m && asprintf(&json, "{\"type\":\"app\",\"msg\":\"%s\"}", m) >= 0) journal(json);
-    free(json);
-    free(m);
+int receiver_take_dev_flag(const char *name) {
+    char path[128];
+    snprintf(path, sizeof path, "/scratch/dev-%s", name);
+    return unlink(path) == 0;
+}
+
+void receiver_crash_for_test(void) {
+    volatile int *p = NULL;
+    *p = 1;
 }
 
 char *receiver_stats_json(void) {
@@ -704,6 +678,5 @@ char *receiver_stats_json(void) {
                  atomic_load(&g_video_bytes), atomic_load(&g_audio_packets), atomic_load(&g_audio_bytes),
                  atomic_load(&g_audio_ct), concealed * 1000 / 44100, keyframes) < 0)
         json = NULL;
-    if (json && atomic_load(&g_connections) > 0) journal(json);
     return json;
 }

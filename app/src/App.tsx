@@ -11,6 +11,7 @@ import {Receiver, ReceiverEvent, SegmentKind} from 'rosellaview-native';
 import {KeepAwake} from './KeepAwake';
 import {MirrorPlayer} from './MirrorPlayer';
 import {buyUnlock, isUnlocked} from './Purchases';
+import {log, receiverEvent, receiverStats, resetStats, warn} from './Telemetry';
 import {Watermark} from './Watermark';
 
 // The receiver advertises as "RosellaView <TAG>", TAG derived from the
@@ -31,16 +32,6 @@ function airplayVolume(db: number): number {
 }
 const SCREEN = Dimensions.get('window');
 
-// Receiver events go to the device log (loggingctl) for now; the device
-// logger keeps only the first line of each message and rate-limits the app,
-// so app-side messages also go to the native journal (receiver events are
-// journaled natively already).
-const log = (msg: string) => {
-  console.log(`ROSELLAVIEW ${msg}`);
-  if (!msg.startsWith('{')) {
-    Receiver.note(msg);
-  }
-};
 
 /** Largest box of the video's aspect ratio that fits the screen, centred. */
 function fit(w: number, h: number) {
@@ -98,6 +89,7 @@ export const App = () => {
     let lastRecovery = 0;
     const recoverVideo = (p: MirrorPlayer) => {
       const now = Date.now();
+      warn('video player stalled', {player: p.stats(), receiver: Receiver.stats()});
       if (now - lastRecovery >= 10000 && Receiver.canResyncVideo()) {
         lastRecovery = now;
         closePlayer();
@@ -118,9 +110,7 @@ export const App = () => {
     });
 
     Receiver.onEvent((e: ReceiverEvent) => {
-      if (e.type !== 'log' || (e.level as number) <= 5) {
-        log(JSON.stringify(e));
-      }
+      receiverEvent(e);
       switch (e.type) {
         case 'started':
           setReceiverName(String(e.name));
@@ -164,6 +154,7 @@ export const App = () => {
             setAudioOnly(false);
             closePlayer();
             closeAudio();
+            resetStats();
           }
           break;
       }
@@ -174,7 +165,7 @@ export const App = () => {
     const stats = setInterval(() => {
       const s = Receiver.stats();
       if ((s.connections as number) > 0) {
-        log(`stats ${JSON.stringify(s)} video ${player.current?.stats() ?? 'none'} audio ${audio.current?.stats() ?? 'none'}`);
+        receiverStats(s, player.current?.metrics() ?? null, audio.current?.metrics() ?? null);
       }
     }, 5000);
     return () => {

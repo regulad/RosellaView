@@ -92,3 +92,21 @@ The laptop's `create_ap` AP now runs with `IEEE80211N=1`, started via `create_ap
 
 **Implications:**
 - Longer pauses (a still screen sends no frames) are cut to 190 ms in the timeline. The player then waits for the next frame, as before.
+
+## D5. Telemetry: Sentry, with a native bridge (2026-11-07)
+
+**Decision:** Crash, error, log and metric reporting goes to Sentry (org `regulad`, project `rosellaview`, US region). It replaces the hand-rolled `/scratch` journal and crash breadcrumbs. Sender details (device ID, model, name, AirPlay version) are attached deliberately, to tell iPhone, iPad and Mac problems apart.
+
+**Why:**
+- No crash-reporting vendor supports Vega. The pieces that work there:
+  - `@sentry/core` with our own client, fetch transport and Hermes stack parser
+  - sentry-native (MIT, so fine under the AGPL) for native crashes
+- **Breakpad doesn't work:** its minidumps arrived as "Invalid Minidump ... system information stream was not found". Its dump writer ptraces the crashed process from a child, which the app sandbox evidently refuses.
+- **Crashpad doesn't work:** it needs a separate handler process.
+- **inproc works, with a fix:** it sends a stack trace that Sentry symbolicates against our uploaded debug files, but its armv7 unwinder returned a single bogus frame. The `on_crash` hook replaces that with pc, lr and stack-scanned return addresses into our own library.
+- Native envelopes go out through JS, so the module needs no HTTPS client of its own.
+
+**Implications:**
+- Every build that should be readable in Sentry goes through `scripts/build.sh`.
+- Sender details are personal data, so the Appstore privacy disclosure must cover crash and diagnostic data sent to a third party (Sentry).
+- The sender's OS name, version and build, its AirPlay version and its MAC address come from the SETUP request. libairplay doesn't pass them on, so our fork does: `regulad/UxPlay`, branch `rosella`, adds a `report_client_details` callback.

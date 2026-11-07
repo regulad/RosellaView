@@ -13,6 +13,7 @@
     "@amazon-devices/keplerscript-appstore-iap-lib": "~2.13",
     "@amazon-devices/react-native-kepler": "~4.0.0",
     "@amazon-devices/react-native-w3cmedia": "~2.3.2",
+    "@sentry/core": "^11.8.0",
     "react": "19.2.0",
     "react-native": "0.83.0",
     "rosellaview-native": "file:../native/rosellaview-native-0.1.0.tgz"

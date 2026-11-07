@@ -30,3 +30,21 @@ distrobox enter vega -- bash -lc 'vega exec vda -s 10.42.24.48:5555 shell "loggi
 ```
 
 Reinstall native modules into the app from an `npm pack` tarball. A `file:` symlink bundles fine but fails at runtime with `Cannot find module`. After repacking a module at the same version, run `npm uninstall` and then `npm install file:<tgz>`, because npm otherwise keeps the cached copy.
+
+## Building and Sentry
+
+Use `scripts/build.sh [environment] [--install]` from the host. It:
+- stamps the release (`rosellaview@<version>+<git sha>`, with a unique suffix for uncommitted builds) into `app/src/buildInfo.ts`, restoring the committed default afterwards
+- builds the native module and the app (Hermes with `-output-source-map`)
+- composes the Hermes and Metro source maps and uploads them, with the native debug files, to Sentry (org `regulad`, project `rosellaview`)
+
+Its uploads need `sentry-cli login`; the token needs `project:write`, `org:read` and `project:releases` scopes. A plain `npm run build` works, but its reports aren't symbolicated.
+
+- **JS** (`app/src/Sentry.ts`, `app/src/Telemetry.ts`) uses `@sentry/core` alone, with a fetch transport and a Hermes stack parser. The React Native SDK needs iOS/Android native code. It reports:
+  - errors and unhandled rejections
+  - receiver events as breadcrumbs and logs
+  - sender details as context and tags
+  - playback stats as metrics, every 5 s while connected
+  - sessions, for release health
+- **Native** (`native/src/sentry.c`) uses sentry-native with the inproc backend. Crashes go into `/data/rosellaview/sentry` and are sent on the next launch, through JS (`Receiver.onSentryEnvelope`); there's no native HTTP. On armv7, an `on_crash` hook rebuilds the stack from pc, lr and a stack scan, because sentry-native's unwinder gets nothing usable there.
+- **Development hooks** (remove before submission): from the component shell, `touch /scratch/dev-js-error` or `/scratch/dev-native-crash`, then relaunch. The app throws, or crashes natively, 5 s after start, to test the whole path.
