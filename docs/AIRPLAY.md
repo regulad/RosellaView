@@ -18,8 +18,11 @@ These are findings about AirPlay senders and libairplay (UxPlay's `lib/`), seen 
 
 - **Video:** mirrors at up to 60 fps, at the screen's aspect ratio (498×1080 in portrait), dropping to 20–45 fps when little changes.
   - **Full-screen video switches the stream to a full-frame video mode.** The SPS changes from the screen's 498×1080 to 1920×1080, and audio restarts at the same moment (2026-11-07). A 60 fps test video with an every-other-frame flasher then arrived at 25–31 fps and looked frozen in one state: aliasing at the sender. The TV showed every frame it received (`video.fps_shown` equal to `video.fps`, 0 `video.dropped`).
-    - The mode isn't capped at 30: it carried 58–60 fps for about 15 s at 1920×1080, likely while player controls were on screen. So the 30 fps was probably the source itself (the app playing a 30 fps rendition), not iOS. Unconfirmed.
-    - To test a true 60 fps path, use a known 60 fps source (a local file, or YouTube with "Stats for nerds" showing 60), or content the phone draws live.
+  - **Which app plays the video decides the rate** (2026-11-07, a 59.94 fps flasher test video):
+    - **Photos, full screen:** iOS sends the video at **60.000 fps**, with H.264 level 4.2 and frame gaps of exactly 16.67 ms. So it resamples onto its own 60 Hz clock rather than passing 59.94 through. The flasher alternates correctly on the TV.
+    - **Other apps** (the same 60 fps video): the stream ran at about 30 fps, and the flasher froze in one state, aliased at the sender. A level-4.0 1920×1080 header (1080p up to ~30 fps) was also seen in these sessions.
+    - In both cases the TV showed every frame it received (`video.fps_shown` equal to `video.fps`, 0 `video.dropped`). The receiver can't change what iOS chooses, so there's nothing for RosellaView to fix here.
+    - Measure it with `video.sender_fps` (from sender timestamps; resolves 29.97 against 30.00) and the `video.level` tag.
   - The SPS has **no VUI timing**.
   - Left alone, it sends **one keyframe (IDR) per session**: one in a 9-minute run. It sends another on a rotation, a new session, or a `forceKeyFrame` request on the event channel.
 - **Audio:**
