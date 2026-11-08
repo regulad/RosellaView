@@ -45,7 +45,7 @@ Detailed reasoning is in `research/03` and `research/08`.
   - The knockout search (`research/08`) found no conflicts for RosellaView.
   - "Rosella" is usable but hard to register in class 9, because Rosella Brands Pty Ltd has a pending US application, ROSEY THE ROSELLA (SN 79453290).
   - "RosellaAir" was dropped because of the Apple association.
-- **Description:** "Receive AirPlay® screen mirroring from iPhone, iPad and Mac." Use "AirPlay" once only, followed by: "RosellaView is not affiliated with or endorsed by Apple Inc. AirPlay is a trademark of Apple Inc." Then add "Based on UxPlay (GPLv3). Source code: <repo URL>."
+- **Description:** "Receive AirPlay screen mirroring from iPhone, iPad and Mac." Use "AirPlay" once only (no ® symbol: the listing is worldwide), followed by: "RosellaView is not affiliated with or endorsed by Apple Inc. AirPlay is a trademark of Apple Inc." Then add "Based on UxPlay (GPLv3). Source code: <repo URL>."
 - Never write "Works with Apple AirPlay", never show Apple's AirPlay glyph, and never mention "Vega" in any listing field (an Amazon rule).
 - **Icon:** original art.
 - **Reviewer notes:** these are essential, because Amazon rejected another Vega mirroring app with "Displays could not connect to the device". Spell out the steps: "same Wi-Fi network; on iPhone open Control Center → Screen Mirroring → RosellaView". Say that no account is needed, and that the watermark is the paid feature.

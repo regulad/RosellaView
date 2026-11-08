@@ -346,7 +346,7 @@ export const App = () => {
     <View style={styles.root}>
       {/* Referential use of Apple's mark for its own sender-side feature;
           the AirPlay trademark notice belongs on the licence screen. */}
-      <Text style={styles.line}>Open AirPlay® and select</Text>
+      <Text style={styles.line}>Open AirPlay and select</Text>
       <Text style={styles.name}>{receiverName}</Text>
       {sender ? <Text style={styles.subtle}>Connecting to {sender}…</Text> : null}
       {unlocked ? null : (

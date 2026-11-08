@@ -6,7 +6,7 @@ The listing rules come from `.claude/docs/PLAN.md` §1.3 and apply to every fiel
 
 - **"AirPlay" appears once,** in the description, followed by "RosellaView is not affiliated with or endorsed by Apple Inc. AirPlay is a trademark of Apple Inc." Never "Works with Apple AirPlay". Never Apple's AirPlay glyph in any image, and never "AirPlay" in the title or icon.
 - **Never "Vega"** in any field (Amazon's rule).
-- **Apple's marks:** in each text field, the first mention of a registered Apple trademark carries ®: AirPlay®, iPhone®, iPad®, Mac®, Safari®. Each description ends with Apple's attribution: "Apple, … are trademarks of Apple Inc., registered in the U.S. and other countries and regions." List only the marks that field uses, alongside the non-affiliation line. Other companies' marks (YouTube) get their own line: "YouTube is a trademark of Google LLC."
+- **Apple's marks:** no ™ or ® symbols: the listing goes to every marketplace, and Apple's trademark list says symbols are only for publications distributed solely in the U.S.; elsewhere, use the attribution notice. So each description ends with Apple's attribution: "Apple, … are trademarks of Apple Inc., registered in the U.S. and other countries and regions.", listing the marks that field uses, alongside the non-affiliation line. Other companies' marks get their own line ("YouTube is a trademark of Google LLC."; for iOS, Apple's wording: "IOS is a trademark or registered trademark of Cisco in the U.S. and other countries and is used under license."). The app follows the same rule (About's Trademarks section).
 - **Say "Based on UxPlay (GPLv3). Source code: https://github.com/regulad/RosellaView."** in the long description.
 
 ## Layout
@@ -45,12 +45,12 @@ The images are committed as the exact files to upload, so nothing has to be rebu
 
 ## Text
 
-Limits are in characters (a "®" or an emoji counts as one). Files are UTF-8 with no trailing newline beyond the last line.
+Limits are in characters (an emoji counts as one). Files are UTF-8 with no trailing newline beyond the last line.
 
 | File | Limit | Notes |
 |---|---|---|
 | `listing/title.txt` | 200 | `RosellaView`. No "AirPlay", no "Vega", no "Fire TV". |
-| `listing/short-description.txt` | 1,200 | Shown first; starts with "Receive AirPlay® screen mirroring from iPhone, iPad and Mac." This is the one place "AirPlay" appears, with the non-affiliation and trademark lines right after it. |
+| `listing/short-description.txt` | 1,200 | Shown first; starts with "Receive AirPlay screen mirroring from iPhone, iPad and Mac." This is the one place "AirPlay" appears, with the non-affiliation and trademark lines right after it. |
 | `listing/long-description.txt` | 4,000 | How to use it (same Wi-Fi network; Control Center → Screen Mirroring), what works and what may not (from `docs/COMPATIBILITY.md`), the watermark and its one-time purchase, privacy in one sentence with the policy URL, and the UxPlay/source line. No second "AirPlay": say "screen mirroring". |
 | `listing/features.txt` | 10 lines | One feature per line, short (the console shows them as bullets). No "AirPlay". |
 | `listing/keywords.txt` | Space-delimited | Search terms describing the function. No third-party trademarks ("AirPlay", "Apple", "iPhone", competitors' names): Amazon's IP policy, and the norm Apple's App Store spells out. |

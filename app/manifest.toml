@@ -3,9 +3,9 @@ schema-version = 1
 [package]
 title = "RosellaView"
 icon = "@image/app_icon.png"
-version = "0.1.0"
+version = "0.1.1"
 # Pass an increasing --build-number for every Appstore upload.
-build-number = 1
+build-number = 2
 id = "xyz.regulad.rosellaview"
 
 [os.version]
