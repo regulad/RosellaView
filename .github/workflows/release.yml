@@ -33,8 +33,15 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Free disk space (the SDK is ~4 GB)
-        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+      # The SDK takes ~4 GB. Deleting the runner's preinstalled toolchains
+      # costs about a minute, so only when space is actually short.
+      - name: Free disk space if needed
+        run: |
+          df -h /
+          if [ "$(df --output=avail -BG / | tail -1 | tr -dc 0-9)" -lt 15 ]; then
+            sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+            df -h /
+          fi
 
       - uses: actions/checkout@v4
         with:
@@ -49,11 +56,38 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 26.13.0
+          # ~/.npm, for the npm installs build.sh runs in each package.
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            app/package-lock.json
+            native/package-lock.json
+            native-view/package-lock.json
 
       - name: Build dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq curl jq tar ca-certificates lz4 file libatomic1 make perl gcc libc6-dev pkg-config
+          sudo apt-get install -y -qq curl jq tar ca-certificates lz4 file libatomic1 make perl gcc libc6-dev pkg-config ccache
+
+      # OpenSSL and FFmpeg build as CMake ExternalProjects, which skip any
+      # step whose stamp exists: a cached build tree skips them entirely. The
+      # key covers everything that changes them (the SDK, the submodule
+      # commits, native/cmake/), so any of those changing rebuilds from scratch.
+      - name: Third-party key
+        id: third-party
+        run: echo "hash=$(git submodule status --recursive | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: native/build
+          key: native-build-armv7-${{ env.VEGA_SDK_VERSION }}-${{ steps.third-party.outputs.hash }}-${{ hashFiles('native/cmake/**', 'native/CMakeLists.txt') }}
+
+      # Everything else compiles through ccache: a fresh checkout gives every
+      # source a new mtime, so make recompiles it all, and ccache answers.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-armv7-${{ env.VEGA_SDK_VERSION }}-${{ github.run_id }}
+          restore-keys: ccache-armv7-${{ env.VEGA_SDK_VERSION }}-
 
       - name: Install the Vega SDK
         env:
@@ -67,9 +101,18 @@ jobs:
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_UPLOAD: ${{ github.ref_type == 'tag' && '1' || '0' }}
+          RV_CCACHE: '1'
+          CCACHE_MAXSIZE: 1G
+          # The SDK's compilers are found by content, not mtime (the SDK is
+          # reinstalled every run).
+          CCACHE_COMPILERCHECK: content
         run: |
+          export CCACHE_DIR="$HOME/.cache/ccache" # the cached path above
           vega -v
+          ccache -z
           scripts/build.sh production
+          ccache -s
+          du -sh native/build native-view/build
 
       - name: Collect packages
         run: |

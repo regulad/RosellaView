@@ -89,8 +89,14 @@ EOF
 # other targets are for the Vega Virtual Device) and unsigned, since Amazon
 # re-signs submitted packages. Development builds keep every target and the
 # developer signature that sideloading needs.
+# RV_CCACHE=1 (CI) compiles through ccache, so a fresh checkout's new mtimes
+# don't cost a full rebuild.
+CMAKE_LAUNCHER=""
+if [ "${RV_CCACHE:-0}" = 1 ]; then
+  CMAKE_LAUNCHER=" --cmakeFlags=-DCMAKE_C_COMPILER_LAUNCHER=ccache --cmakeFlags=-DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
+fi
 if [ "$ENVIRONMENT" = production ]; then
-  NATIVE_BUILD="npm run build:js && vega build -b Release -t armv7"
+  NATIVE_BUILD="npm run build:js && vega build -b Release -t armv7$CMAKE_LAUNCHER"
   APP_TARGET="--target armv7 --additional-native-options \"--no-profile\""
 else
   NATIVE_BUILD="npm run build"
