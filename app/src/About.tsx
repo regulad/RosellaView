@@ -4,10 +4,10 @@
  * the settings: the Compatibility Mode checkbox (MSE video instead of the
  * native pipeline, DECISIONS.md D12) and resetting the receiver's identity.
  *
- * One column, scrolled by the platform's own focus handling: each paragraph
- * is a focusable block (Vega's `focusable` on View), so up/down moves focus
- * block by block and the ScrollView keeps the focused one in view. The
- * settings are ordinary buttons among them.
+ * One column, scrolled by the platform's own focus handling: the headings are
+ * focusable (Vega's `focusable` on View), so up/down moves focus section by
+ * section and the ScrollView keeps the focused one in view. The settings are
+ * ordinary buttons, and the mark at the end can take focus so it's reached.
  *
  * Copyright (C) 2026 Parker Wahle
  * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -45,10 +45,10 @@ const NOTICES: [string, string, string][] = [
   ['Node-API headers', 'MIT', 'Node.js contributors'],
 ];
 
-/** A paragraph the remote can move focus to, so scrolling reaches it. */
-const Block = ({children, first}: {children: React.ReactNode; first?: boolean}) => (
-  <View focusable hasTVPreferredFocus={first} style={styles.block}>
-    {children}
+/** A section heading: what the remote moves focus to, so scrolling reaches it. */
+const Heading = ({children}: {children: React.ReactNode}) => (
+  <View focusable style={styles.headingBlock}>
+    <Text style={styles.heading}>{children}</Text>
   </View>
 );
 
@@ -73,63 +73,48 @@ export const About = ({receiverName, onResetIdentity, compatibilityMode, onCompa
   return (
     <View style={styles.root}>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
-        <Block first>
+        <View focusable hasTVPreferredFocus>
           <Text style={styles.title}>RosellaView</Text>
           <Text style={styles.body}>Version {BUILD.release.replace(/^rosellaview@/, '')}</Text>
-        </Block>
+        </View>
 
-        <Text style={styles.heading}>Privacy</Text>
-        <Block>
-          <Text style={styles.small}>
-            What you mirror stays on your network: your screen, video and audio go only from your device to this TV, and
-            are never recorded or sent anywhere else.
-          </Text>
-        </Block>
-        <Block>
-          <Text style={styles.small}>
-            To find and fix problems, RosellaView sends crash reports and diagnostics to Sentry (sentry.io): errors,
-            playback and performance statistics, this TV's software version, and the model and operating system version
-            of the device you mirror from (such as "iPhone18,1, iOS 27"). Nothing that identifies you or your devices is
-            sent: no names, IDs or addresses. Purchases are handled by the Amazon Appstore. Privacy policy:{' '}
-            {PRIVACY_URL}
-          </Text>
-        </Block>
+        <Heading>Privacy</Heading>
+        <Text style={styles.small}>
+          What you mirror stays on your network: your screen, video and audio go only from your device to this TV, and
+          are never recorded or sent anywhere else.
+        </Text>
+        <Text style={styles.small}>
+          To find and fix problems, RosellaView sends crash reports and diagnostics to Sentry (sentry.io): errors,
+          playback and performance statistics, this TV's software version, and the model and operating system version of
+          the device you mirror from (such as "iPhone18,1, iOS 27"). Nothing that identifies you or your devices is
+          sent: no names, IDs or addresses. Purchases are handled by the Amazon Appstore. Privacy policy: {PRIVACY_URL}
+        </Text>
 
-        <Text style={styles.heading}>Licence</Text>
-        <Block>
-          <Text style={styles.small}>
-            Copyright © 2026 Parker Wahle. RosellaView is free software: you can redistribute it and/or modify it under
-            the terms of the GNU Affero General Public License, version 3 or (at your option) any later version. It
-            comes with ABSOLUTELY NO WARRANTY. Licence: {LICENSE_URL}
-          </Text>
-        </Block>
-        <Block>
-          <Text style={styles.small}>Source code: {SOURCE_URL}</Text>
-        </Block>
+        <Heading>Licence</Heading>
+        <Text style={styles.small}>
+          Copyright © 2026 Parker Wahle. RosellaView is free software: you can redistribute it and/or modify it under
+          the terms of the GNU Affero General Public License, version 3 or (at your option) any later version. It comes
+          with ABSOLUTELY NO WARRANTY. Licence: {LICENSE_URL}
+        </Text>
+        <Text style={styles.small}>Source code: {SOURCE_URL}</Text>
 
-        <Text style={styles.heading}>Includes</Text>
-        <Block>
-          {NOTICES.map(([name, licence, holder]) => (
-            <Text key={name} style={styles.notice}>
-              {name} ({licence}), © {holder}
-            </Text>
-          ))}
-        </Block>
-        <Block>
-          <Text style={styles.small}>
-            Licence texts and source code for these are available with RosellaView's source.
+        <Heading>Includes</Heading>
+        {NOTICES.map(([name, licence, holder]) => (
+          <Text key={name} style={styles.notice}>
+            {name} ({licence}), © {holder}
           </Text>
-        </Block>
+        ))}
+        <Text style={styles.small}>
+          Licence texts and source code for these are available with RosellaView's source.
+        </Text>
 
-        <Text style={styles.heading}>Trademarks</Text>
-        <Block>
-          <Text style={styles.small}>
-            AirPlay is a trademark of Apple Inc., registered in the U.S. and other countries. RosellaView is not
-            affiliated with or endorsed by Apple Inc.
-          </Text>
-        </Block>
+        <Heading>Trademarks</Heading>
+        <Text style={styles.small}>
+          AirPlay is a trademark of Apple Inc., registered in the U.S. and other countries. RosellaView is not
+          affiliated with or endorsed by Apple Inc.
+        </Text>
 
-        <Text style={styles.heading}>Settings</Text>
+        <Heading>Settings</Heading>
         <Pressable onPress={() => onCompatibilityMode(!compatibilityMode)} style={styles.checkRow}>
           {({focused}) => (
             <>
@@ -140,12 +125,10 @@ export const About = ({receiverName, onResetIdentity, compatibilityMode, onCompa
             </>
           )}
         </Pressable>
-        <Block>
-          <Text style={styles.small}>
-            Compatibility Mode plays mirrored video through the TV's standard video player. Try it if the picture
-            doesn't appear. The brightest highlights and the darkest shadows will lose fidelity when this option is on.
-          </Text>
-        </Block>
+        <Text style={styles.small}>
+          Compatibility Mode plays mirrored video through the TV's standard video player. Try it if the picture doesn't
+          appear. The brightest highlights and the darkest shadows will lose fidelity when this option is on.
+        </Text>
         <Pressable
           onPress={() => {
             if (confirming) {
@@ -164,12 +147,10 @@ export const About = ({receiverName, onResetIdentity, compatibilityMode, onCompa
             </View>
           )}
         </Pressable>
-        <Block>
-          <Text style={styles.small}>
-            Resetting gives this TV a new name (now "{receiverName}") and forgets the devices paired with it; select it
-            again on them afterwards.
-          </Text>
-        </Block>
+        <Text style={styles.small}>
+          Resetting gives this TV a new name (now "{receiverName}") and forgets the devices paired with it; select it
+          again on them afterwards.
+        </Text>
         <View focusable style={styles.markBlock}>
           <Image source={PERSONAL_MARK} style={styles.mark} resizeMode="contain" />
         </View>
@@ -182,17 +163,11 @@ const styles = StyleSheet.create({
   root: {flex: 1, backgroundColor: '#000', alignItems: 'center'},
   scroll: {flex: 1, width: '80%'},
   content: {paddingTop: 72, paddingBottom: 72},
-  block: {alignSelf: 'stretch'},
+  headingBlock: {marginTop: 36, marginBottom: 10},
   markBlock: {alignSelf: 'center', marginTop: 56},
   mark: {width: 177, height: 162},
   title: {color: '#fff', fontSize: 44, fontWeight: 'bold'},
-  heading: {
-    color: '#fff',
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginTop: 36,
-    marginBottom: 10,
-  },
+  heading: {color: '#fff', fontSize: 28, fontWeight: 'bold'},
   body: {color: '#aaa', fontSize: 24, marginTop: 4},
   small: {color: '#aaa', fontSize: 22, lineHeight: 32, marginBottom: 10},
   notice: {color: '#aaa', fontSize: 22, lineHeight: 32},
