@@ -55,9 +55,23 @@ const Heading = ({children}: {children: React.ReactNode}) => (
   </View>
 );
 
-/** A setting: "Label [✓]". */
-const Checkbox = ({label, checked, onChange}: {label: string; checked: boolean; onChange: (on: boolean) => void}) => (
-  <Pressable onPress={() => onChange(!checked)} style={styles.checkRow}>
+/** A setting: "Label [✓]". Disabled, it's grey and the remote skips it. */
+const Checkbox = ({
+  label,
+  checked,
+  onChange,
+  disabled = false,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (on: boolean) => void;
+  disabled?: boolean;
+}) => (
+  <Pressable
+    disabled={disabled}
+    focusable={!disabled}
+    onPress={() => onChange(!checked)}
+    style={[styles.checkRow, disabled && styles.disabled]}>
     {({focused}) => (
       <>
         <Text style={[styles.checkLabel, focused && styles.lit]}>{label}</Text>
@@ -146,10 +160,15 @@ export const About = ({
           Compatibility Mode plays mirrored video through the TV's standard video player. Try it if the picture doesn't
           appear. The brightest highlights and the darkest shadows will lose fidelity when this option is on.
         </Text>
-        <Checkbox label="Bad LAN/Wi-Fi Mode" checked={badNetworkMode} onChange={onBadNetworkMode} />
+        <Checkbox
+          label="Bad LAN/Wi-Fi Mode"
+          checked={badNetworkMode}
+          onChange={onBadNetworkMode}
+          disabled={compatibilityMode}
+        />
         <Text style={styles.small}>
           Bad LAN/Wi-Fi Mode waits longer for the picture and sound to arrive: about 0.7 seconds instead of 0.15. Try it
-          if mirroring stutters or the sound drops out.
+          if mirroring stutters or the sound drops out. Does not apply to Compatibility Mode.
         </Text>
         <Pressable
           onPress={() => {
@@ -223,4 +242,5 @@ const styles = StyleSheet.create({
   boxLit: {borderColor: '#fff', backgroundColor: '#333'},
   check: {color: '#ddd', fontSize: 24, fontWeight: 'bold', lineHeight: 28},
   lit: {color: '#fff'},
+  disabled: {opacity: 0.4},
 });
