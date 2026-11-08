@@ -19,7 +19,8 @@ A RosellaSoftware app, published by Parker Wahle <regulad@regulad.xyz>: a screen
 
 - **`.claude/docs/`:** working notes for agents and the owner: `PLAN.md` (roadmap), `DECISIONS.md` (D1…), `AIRPLAY.md` (sender behaviour), `SUBMISSION.md` (checklist). Vega platform facts go in `~/repositories/ProjectRosella/VEGA.md`.
 - **`.claude/scratch/`:** throwaway files (gitignored).
-- **`docs/`:** what people read or publish: `COMPATIBILITY.md` (support and listing), `PRIVACY.md` (the hosted policy's source; the `gh-pages` copy must match) and `brand/` (logo and mark sources).
+- **`docs/`:** what people read or publish: `COMPATIBILITY.md` (support and listing), `PRIVACY.md` (the hosted policy's source; the `gh-pages` copy must match), `ASSETS.md` (the Appstore listing's files and their formats) and `brand/` (logo and mark sources).
+- **`assets/`:** the Appstore listing itself (icon, background, screenshots, listing text), as described in `docs/ASSETS.md`. The app's bundled images are in `app/`.
 
 ## Formatting and linting
 
