@@ -1,0 +1,13 @@
+<!-- App icon: 1280x720 tile. Logo (docs/brand/RosellaView.svg) and wordmark. Render: assets/sources/render.sh -->
+<svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
+<rect width="1280" height="720" fill="white"/>
+<svg x="42" y="150" width="420" height="420" viewBox="0 0 660 660" fill="none">
+<rect x="88" y="215" width="484" height="231" rx="28" stroke-width="28" stroke="black"/>
+<line x1="125" y1="318" x2="125" y2="344" stroke-width="28" stroke-linecap="round" stroke="black"/>
+<line x1="205.093" y1="75.9589" x2="464.959" y2="175.907" stroke-width="28" stroke-linecap="round" stroke="black"/>
+<line x1="205" y1="76" x2="205" y2="176" stroke-width="28" stroke-linecap="round" stroke="black"/>
+<line x1="454.907" y1="585.041" x2="195.041" y2="485.093" stroke-width="28" stroke-linecap="round" stroke="black"/>
+<line x1="455" y1="585" x2="455" y2="485" stroke-width="28" stroke-linecap="round" stroke="black"/>
+</svg>
+<text x="492" y="400" font-family="Noto Sans" font-weight="700" font-size="118" fill="black">RosellaView</text>
+</svg>

@@ -1,0 +1,29 @@
+RosellaView turns your Fire TV into a screen mirroring receiver for iPhone, iPad and Mac. Show photos and videos to the room, present from your laptop, or put a game or app from your phone on the big screen, with its sound.
+
+HOW TO USE IT
+1. Open RosellaView on your Fire TV. It shows the name of this TV.
+2. Make sure your iPhone, iPad or Mac is on the same Wi-Fi network.
+3. On iPhone or iPad, open Control Center and tap Screen Mirroring. On a Mac, use Screen Mirroring in Control Center or the menu bar.
+4. Choose the name shown on the TV. That's it: no account and no app on your device.
+
+WHAT YOU GET
+- Your whole screen, in portrait or landscape, with audio.
+- Accurate colour: the full range of brightness iPhones and iPads send, from the darkest shadows to the brightest highlights.
+- Smooth motion, up to 60 frames per second when your device sends it.
+- Lip sync that stays on track, with an audio delay you can fine-tune with left and right on the remote.
+- Video inside mirrored apps, such as Photos, Safari and YouTube, and full-screen video from a Mac.
+- Music and podcasts with screen mirroring off, played as audio only.
+
+FREE, WITH A WATERMARK
+RosellaView is free to use. Until you unlock it, a small RosellaView badge moves around the picture and a short spoken "Preview" plays now and then. A one-time purchase removes both, for good.
+
+GOOD TO KNOW
+- Copy-protected video (most paid streaming apps) isn't sent by iPhone and iPad when mirroring, so it won't appear.
+- Some apps "cast" their video to the TV instead of mirroring it, and may show only their controls.
+- If the picture doesn't appear, try Compatibility Mode under About & privacy on the start screen.
+
+PRIVACY
+What you mirror stays on your network: it goes only from your device to this TV and is never recorded or sent anywhere else. RosellaView sends crash reports and diagnostics, including the model and system version of the device you mirror from, and nothing that identifies you. Privacy policy: https://regulad.github.io/RosellaView/
+
+OPEN SOURCE
+Based on UxPlay (GPLv3). Source code: https://github.com/regulad/RosellaView

@@ -24,7 +24,10 @@ assets/
     long-description.txt    Long description
     features.txt            Product feature bullets, one per line
     keywords.txt            Keywords, space-delimited, one line
-  sources/                  What the images are made from (SVG, layered files)
+  iap/
+    in-app-items.csv        In-app items, for the console's CSV import
+  sources/                  What the images are made from: icon.svg, background.svg,
+                            and render.sh, which renders them to the PNGs above
 ```
 
 The images are committed as the exact files to upload, so nothing has to be rebuilt at submission time. Their sources go in `sources/`. The logo and mark already live in `docs/brand/`; reference them rather than copying.
@@ -49,11 +52,21 @@ Limits are in characters (a "®" or an emoji counts as one). Files are UTF-8 wit
 | `listing/short-description.txt` | 1,200 | Shown first; starts with "Receive AirPlay® screen mirroring from iPhone, iPad and Mac." This is the one place "AirPlay" appears, with the non-affiliation and trademark lines right after it. |
 | `listing/long-description.txt` | 4,000 | How to use it (same Wi-Fi network; Control Center → Screen Mirroring), what works and what may not (from `docs/COMPATIBILITY.md`), the watermark and its one-time purchase, privacy in one sentence with the policy URL, and the UxPlay/source line. No second "AirPlay": say "screen mirroring". |
 | `listing/features.txt` | 10 lines | One feature per line, short (the console shows them as bullets). No "AirPlay". |
-| `listing/keywords.txt` | Space-delimited | Search terms. Pick them after looking at what comparable Fire TV mirroring apps use (to do). No competitor or Apple trademarks used as keywords beyond what the description allows. |
+| `listing/keywords.txt` | Space-delimited | Search terms describing the function. No third-party trademarks ("AirPlay", "Apple", "iPhone", competitors' names): Amazon's IP policy, and the norm Apple's App Store spells out. |
+
+## In-app items (`iap/in-app-items.csv`)
+
+The Developer Console imports in-app items from CSV: **In-App Items → Import Multiple IAPs using CSV**, choosing TEST (Live App Testing) or TEST and LIVE. The format follows Amazon's Vega template (https://amzndevresources.com/vega/Amazon_IAP_Template.csv) and its field reference (https://developer.amazon.com/docs/in-app-purchasing/iap-bulk-items-csv.html):
+
+- UTF-8, CRLF line endings, one header row:
+  `Product ID (SKU),Locale; Title; Description,Auto Fill Prices,Price,IAP Type`
+- **Product ID:** `rosellaview.remove_watermark`. It must match `UNLOCK_SKU` in `app/src/Purchases.ts`. It's unique per developer account and can't be changed or deleted once submitted.
+- **Locale; Title; Description:** semicolon-separated sets ending in `;`. `en_US` is required. Keep commas and double quotes out of it: the file isn't quoted.
+- **Auto Fill Prices `TRUE`** with **Price** `USD; 3990000`: $3.99, in millionths of the currency unit, with the other marketplaces filled in from it.
+- **IAP Type:** `Entitlement` (a one-time unlock). It can't be changed after creation.
 
 ## Not in this folder
 
 - **Privacy policy URL:** https://regulad.github.io/RosellaView/ (source `docs/PRIVACY.md`).
 - **Privacy questionnaire and reviewer notes:** `.claude/docs/SUBMISSION.md`.
-- **The in-app item:** an entitlement with SKU `rosellaview.remove_watermark` (it must match `app/src/Purchases.ts`).
 - **The package:** `rosellaview_armv7.vpkg` from the tag's GitHub Release.
