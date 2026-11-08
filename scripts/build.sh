@@ -4,8 +4,10 @@
 #
 #   scripts/build.sh [environment] [--install]
 #
-# environment defaults to "development". Run on the host; the Vega builds run
-# in the `vega` distrobox. Needs `sentry-cli login` (or SENTRY_AUTH_TOKEN).
+# environment defaults to "development". With the Vega CLI on PATH (CI: see
+# .github/workflows/release.yml) the builds run directly; otherwise in the
+# `vega` distrobox (the owner's laptop). Needs `sentry-cli login` or
+# SENTRY_AUTH_TOKEN; SENTRY_UPLOAD=0 skips the upload (a dry-run build).
 #
 # Copyright (C) 2026 Parker Wahle
 # SPDX-License-Identifier: AGPL-3.0-or-later
@@ -25,6 +27,12 @@ APP="$ROOT/app"
 ORG=regulad
 PROJECT=rosellaview
 SENTRY_CLI="npx -y @sentry/cli@3.8.2"
+SENTRY_UPLOAD=${SENTRY_UPLOAD:-1}
+if command -v vega > /dev/null; then
+  in_vega() { bash -c "$1"; }
+else
+  in_vega() { distrobox enter vega -- bash -lc "$1"; }
+fi
 
 VERSION=$(node -p "require('$APP/package.json').version")
 GIT=$(git -C "$ROOT" rev-parse --short=12 HEAD)
@@ -70,8 +78,9 @@ export const BUILD = {
 EOF
 
 echo "== $RELEASE ($ENVIRONMENT)"
-distrobox enter vega -- bash -lc "set -euo pipefail
+in_vega "set -euo pipefail
   cd '$ROOT/native'
+  [ -d node_modules ] || npm install --no-audit --no-fund > /dev/null 2>&1
   npm run build > /tmp/rv-native-build.log 2>&1 || { grep -E 'error|FAILED' /tmp/rv-native-build.log | head -20; exit 1; }
   rm -f ./*.tgz
   npm pack --ignore-scripts > /dev/null 2>&1
@@ -99,14 +108,18 @@ HERMES_MAP="$BUNDLES/index.hermes.bundle.map"
 cp "$BUNDLES/index.bundle" "$OUT/index.bundle"
 node "$APP/node_modules/react-native/scripts/compose-source-maps.js" "$METRO_MAP" "$HERMES_MAP" -o "$OUT/index.bundle.map"
 
+if [ "$SENTRY_UPLOAD" = 1 ]; then
 $SENTRY_CLI releases --org "$ORG" --project "$PROJECT" new "$RELEASE"
 $SENTRY_CLI sourcemaps upload --org "$ORG" --project "$PROJECT" --release "$RELEASE" --dist "$DIST" \
   --url-prefix app:/// --no-rewrite "$OUT"
 $SENTRY_CLI debug-files upload --org "$ORG" --project "$PROJECT" "$APP"/build/*-release/debug/
 $SENTRY_CLI releases --org "$ORG" --project "$PROJECT" finalize "$RELEASE"
+else
+  echo "== Sentry upload skipped (SENTRY_UPLOAD=0)"
+fi
 
 if [ "$INSTALL" = 1 ]; then
-  distrobox enter vega -- bash -lc "cd '$APP'
+  in_vega "cd '$APP'
     vega device terminate-app --appName xyz.regulad.rosellaview.main > /dev/null 2>&1 || true
     vega device install-app --packagePath build/armv7-release/rosellaview_armv7.vpkg | tail -1
     vega device launch-app --appName xyz.regulad.rosellaview.main | tail -1"

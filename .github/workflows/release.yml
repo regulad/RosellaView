@@ -1,0 +1,93 @@
+# On a version tag (v0.1.0): the checks, then a production build with the
+# pinned Vega SDK. The .vpkg files go to a GitHub Release, and the source maps
+# and native debug files to Sentry. Uploading to the Appstore stays manual:
+# its submission API doesn't take Vega packages yet.
+#
+# Run it by hand (workflow_dispatch) for a dry run: it builds and keeps the
+# packages as a workflow artifact, with no release and no Sentry upload.
+#
+# Secrets: SENTRY_AUTH_TOKEN (a Sentry organization token with
+# project:releases and project:write).
+#
+# Copyright (C) 2026 Parker Wahle
+# SPDX-License-Identifier: AGPL-3.0-or-later
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+env:
+  VEGA_SDK_VERSION: 2.0.13986
+
+jobs:
+  check:
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    needs: check
+    # The Vega SDK supports Ubuntu 20.04-24.04 on x86_64; the owner's builds
+    # run on 22.04 (the vega distrobox), so CI does too.
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - name: Free disk space (the SDK is ~4 GB)
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Tag matches the app version
+        if: github.ref_type == 'tag'
+        run: |
+          version=$(node -p "require('./app/package.json').version")
+          [ "${GITHUB_REF_NAME}" = "v${version}" ] || { echo "tag ${GITHUB_REF_NAME} != v${version}"; exit 1; }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.13.0
+
+      - name: Build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq curl jq tar ca-certificates lz4 file libatomic1 make perl gcc libc6-dev pkg-config
+
+      - name: Install the Vega SDK
+        env:
+          NONINTERACTIVE: 'true'
+          SKIP_VVD_INSTALL: 'true'
+        run: |
+          curl -fsSL https://sdk-installer.vega.labcollab.net/get_vvm.sh | bash
+          echo "$HOME/vega/bin" >> "$GITHUB_PATH"
+
+      - name: Build
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_UPLOAD: ${{ github.ref_type == 'tag' && '1' || '0' }}
+        run: |
+          vega -v
+          scripts/build.sh production
+
+      - name: Collect packages
+        run: |
+          mkdir -p out
+          for arch in armv7 aarch64 x86_64; do
+            cp "app/build/${arch}-release/rosellaview_${arch}.vpkg" out/
+          done
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rosellaview-vpkg
+          path: out/*.vpkg
+
+      - name: GitHub Release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" out/*.vpkg --title "RosellaView ${GITHUB_REF_NAME}" \
+            --notes "Production build of ${GITHUB_SHA}. Upload rosellaview_armv7.vpkg (and aarch64) in the Amazon Developer Console."
