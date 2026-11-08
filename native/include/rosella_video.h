@@ -2,7 +2,7 @@
  * rosella_video.h - the native video bridge between the receiver
  * (libRosellaView.so, the Node-API module) and the native surface component
  * (xyz.regulad.rosellaview.surface.so), which decodes and renders the
- * mirrored video itself (docs/DECISIONS.md D12).
+ * mirrored video itself (.claude/docs/DECISIONS.md D12).
  *
  * Both libraries are loaded into the app's process. The component looks the
  * functions below up in libRosellaView.so at run time (dlopen RTLD_NOLOAD,

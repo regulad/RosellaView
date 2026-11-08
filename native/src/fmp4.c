@@ -18,7 +18,7 @@
 /* The frame rate declared in the SPS. Vega's player declares a discontinuity
  * (and drops everything until the next keyframe) at any frame lasting over
  * twice the declared frame duration, so declare a low rate and real
- * durations up to MAX_DURATION play as given (docs/DECISIONS.md D4). */
+ * durations up to MAX_DURATION play as given (.claude/docs/DECISIONS.md D4). */
 #define VUI_FPS 10u
 #define MIN_DURATION (TIMESCALE / 1000u)
 #define MAX_DURATION (2u * TIMESCALE / VUI_FPS - TIMESCALE / 100u) /* 190 ms */

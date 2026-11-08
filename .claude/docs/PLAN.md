@@ -95,7 +95,7 @@ UxPlay delivers decrypted Annex-B H.264 (or H.265) access units with NTP timesta
 | B. Native `IMediaFactory`/`IMediaTransform` | Feed NALs straight into the SDK's native codec interface and render to a media surface (`makeMediaSurfaceView`/`IMediaSurface`). | Lowest latency, no JS in the data path. | It's undocumented and **not in the OS 2.0 public compatibility contract**, so Appstore acceptance and stability across OS updates are at risk. |
 | C. Software decode | FFmpeg H.264 decode, then GL ES texture upload. | No dependency on platform media. | 4× A55 at 1.7 GHz is marginal for 1080p60; GL linking under Strict ABI Check is unproven; the screensaver needs a media session. |
 
-**Decided: A**, with about 0.45 s of player latency accepted (see `docs/DECISIONS.md` D1). B turned out to be unusable from React Native: native MSSE needs a native `IMediaSurface`, which a Turbo Module can't obtain for the RN window. C stays a fallback only.
+**Decided: A**, with about 0.45 s of player latency accepted (see `.claude/docs/DECISIONS.md` D1). B turned out to be unusable from React Native: native MSSE needs a native `IMediaSurface`, which a Turbo Module can't obtain for the RN window. C stays a fallback only.
 
 **Ask the sender for H.264 only.** UxPlay can advertise H.265 support; leave that off until MSE HEVC is proven.
 
@@ -120,7 +120,7 @@ Probe code is throwaway, kept in `probes/` or in `~/vega-probe`.
 5. **Strict ABI Check:** run the SDK's validator on a build that statically links OpenSSL 3, libplist and FFmpeg.
 6. **IAP:** create the entitlement in the developer console. Use the SDK's IAP test tooling (App Tester or the equivalent; check the docs) to purchase and restore from JS.
 
-Exit criteria: pick a video backend, an audio backend and a latency budget. Record them in `docs/DECISIONS.md`.
+Exit criteria: pick a video backend, an audio backend and a latency budget. Record them in `.claude/docs/DECISIONS.md`.
 
 ### Phase 1: the build skeleton
 

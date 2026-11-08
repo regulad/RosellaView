@@ -2,7 +2,7 @@
  * audio.c - AirPlay audio → fragmented MP4 that Vega's MSE plays.
  *
  * Vega's MSE plays FLAC and AAC-LC but not ALAC, AAC-ELD or raw PCM
- * (docs/DECISIONS.md D3), so:
+ * (.claude/docs/DECISIONS.md D3), so:
  *   ct 4 (AAC-LC)            passes through untouched;
  *   ct 2 (ALAC), 8 (AAC-ELD) are decoded with libavcodec, then
  *   ct 1 (PCM) and decoded audio get the spoken watermark mixed in (while

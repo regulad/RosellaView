@@ -203,7 +203,7 @@ The laptop's `create_ap` AP now runs with `IEEE80211N=1`, started via `create_ap
 - **E:** as D, without `colr`
 
 **Decision:**
-- Ship with the limitation and document it (COMPATIBILITY.md).
+- Ship with the limitation and document it (`docs/COMPATIBILITY.md`).
 - The muxer still writes the `colr` box from the sender's SPS: it's correct per ISO BMFF, and a future Vega update may honour it.
 - `video_init` reports the sender's range and colour codes, and the `video.range` tag marks affected sessions.
 

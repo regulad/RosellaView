@@ -1,6 +1,6 @@
 # AGENTS.md: RosellaView
 
-A RosellaSoftware app, published by Parker Wahle <regulad@regulad.xyz>: a screen-mirroring receiver (iPhone, iPad, Mac → TV) for Fire TV devices on Vega OS, built on UxPlay's protocol library. The roadmap and the reasoning behind each decision are in [`docs/PLAN.md`](docs/PLAN.md).
+A RosellaSoftware app, published by Parker Wahle <regulad@regulad.xyz>: a screen-mirroring receiver (iPhone, iPad, Mac → TV) for Fire TV devices on Vega OS, built on UxPlay's protocol library. The roadmap and the reasoning behind each decision are in [`.claude/docs/PLAN.md`](.claude/docs/PLAN.md).
 
 ## Conventions (don't re-litigate without asking)
 
@@ -13,7 +13,13 @@ A RosellaSoftware app, published by Parker Wahle <regulad@regulad.xyz>: a screen
 - **Every third-party dependency is a git submodule under `third_party/`, built from source and statically linked.** If a vendored library needs a code change, fork it to `regulad/<name>` on its own branch (e.g. `rosella`), point `.gitmodules`'s `url`/`branch` at the fork, and keep the diff small and clean. Never leave uncommitted changes inside a submodule.
 - **UxPlay is used for `lib/` only.** `renderers/` and `uxplay.cpp` (GStreamer, X11, the CLI) are not built. Our receiver implements `raop_callbacks_t` itself.
 - **Licence: AGPL-3.0-or-later** (`LICENSE.md`, the FSF Markdown text). Don't add dependencies whose licence is incompatible with the GPL, e.g. libfdk-aac or a GPL/non-free FFmpeg configuration.
-- **Never mention "Vega" in Appstore listing text, and never put "AirPlay" or Apple's glyph in the app's name or icon.** Description wording is in `docs/PLAN.md` §1.3.
+- **Never mention "Vega" in Appstore listing text, and never put "AirPlay" or Apple's glyph in the app's name or icon.** Description wording is in `.claude/docs/PLAN.md` §1.3.
+
+## Where documents go
+
+- **`.claude/docs/`:** working notes for agents and the owner: `PLAN.md` (roadmap), `DECISIONS.md` (D1…), `AIRPLAY.md` (sender behaviour), `SUBMISSION.md` (checklist). Vega platform facts go in `~/repositories/ProjectRosella/VEGA.md`.
+- **`.claude/scratch/`:** throwaway files (gitignored).
+- **`docs/`:** what people read or publish: `COMPATIBILITY.md` (support and listing), `PRIVACY.md` (the hosted policy's source; the `gh-pages` copy must match) and `brand/` (logo and mark sources).
 
 ## Formatting and linting
 

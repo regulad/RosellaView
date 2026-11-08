@@ -15,13 +15,16 @@
 import {useTVEventHandler} from '@amazon-devices/react-native-kepler';
 import type {HWEvent} from '@amazon-devices/react-native-kepler';
 import React, {useEffect, useRef, useState} from 'react';
-import {BackHandler, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {BackHandler, Image, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {BUILD} from './buildInfo';
 
 export const SOURCE_URL = 'https://github.com/regulad/RosellaView';
 export const PRIVACY_URL = 'https://regulad.github.io/RosellaView/';
 const LICENSE_URL = 'https://www.gnu.org/licenses/agpl-3.0.html';
 const SCROLL_STEP = 240;
+// The author's mark (docs/brand/ParkerWahle.svg, white for dark backgrounds),
+// rendered at twice the size it's shown.
+const PERSONAL_MARK = require('./assets/personal_mark.png');
 // Reset asks for a second press within this long.
 const CONFIRM_MS = 4000;
 const KEY_UP = 1;
@@ -201,6 +204,7 @@ export const About = ({receiverName, onResetIdentity, compatibilityMode, onCompa
           Resetting gives this TV a new name (now "{receiverName}") and forgets the devices paired with it; select it
           again on them afterwards.
         </Text>
+        <Image source={PERSONAL_MARK} style={styles.mark} resizeMode="contain" />
       </ScrollView>
     </View>
   );
@@ -208,6 +212,7 @@ export const About = ({receiverName, onResetIdentity, compatibilityMode, onCompa
 
 const styles = StyleSheet.create({
   root: {flex: 1, backgroundColor: '#000', alignItems: 'center'},
+  mark: {alignSelf: 'center', width: 177, height: 162, marginTop: 56},
   scroll: {flex: 1, width: '80%'},
   content: {paddingTop: 72, paddingBottom: 72},
   title: {color: '#fff', fontSize: 44, fontWeight: 'bold'},

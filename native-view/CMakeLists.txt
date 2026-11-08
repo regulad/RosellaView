@@ -6,7 +6,7 @@ project(RosellaSurface
 
 set(CMAKE_CXX_STANDARD 17)
 
-# A native UI component, built the SDK's way (docs/DECISIONS.md D10): the IDL
+# A native UI component, built the SDK's way (.claude/docs/DECISIONS.md D10): the IDL
 # import library generates the interface glue for the OS's libapmf.so. No
 # vendor static library is linked.
 find_package(Apmf REQUIRED)

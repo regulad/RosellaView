@@ -1,2 +1,4 @@
 # Repository tooling (package.json here: Prettier, ESLint).
 /node_modules/
+/.claude/scratch/
+/.claude/settings.local.json

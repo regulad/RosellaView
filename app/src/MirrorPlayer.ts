@@ -4,7 +4,7 @@
  * Video and audio get separate players: video pauses longer than 190 ms (a
  * still screen) are cut short in the timestamps (see native/src/fmp4.c), so a
  * shared MediaSource clocked by real-time audio would drop video as late.
- * See docs/DECISIONS.md D1 and D3.
+ * See .claude/docs/DECISIONS.md D1 and D3.
  *
  * Copyright (C) 2026 Parker Wahle
  * SPDX-License-Identifier: AGPL-3.0-or-later

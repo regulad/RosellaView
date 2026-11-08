@@ -1,7 +1,7 @@
 // JS face of xyz.regulad.rosellaview.surface: a native view that shows the
 // mirrored video. It takes the H.264 straight from the receiver, decodes it
 // with the hardware decoder and renders it with its own shader, full range
-// intact (docs/DECISIONS.md D12). Mount it full screen; it letterboxes. Its
+// intact (.claude/docs/DECISIONS.md D12). Mount it full screen; it letterboxes. Its
 // state is in Receiver.nativeVideo(), its status lines in receiver events.
 //
 // Copyright (C) 2026 Parker Wahle

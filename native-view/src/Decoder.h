@@ -2,7 +2,7 @@
  * Decoder: the OS's hardware H.264 decoder, through media_transform
  * (IMediaFactory::createTransform). Off the OS compatibility contract, but it
  * works from an app and leaves the samples alone: full range survives
- * bit-exactly (docs/DECISIONS.md D12; ProjectRosella/VEGA.md).
+ * bit-exactly (.claude/docs/DECISIONS.md D12; ProjectRosella/VEGA.md).
  *
  * Access units go in as Annex-B; decoded pictures come out in MediaTek's MM21
  * block layout (Y in 16x32 tiles, interleaved UV in 16x16), which detile()

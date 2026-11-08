@@ -31,4 +31,4 @@ The owner does the submission; nothing here is automated. Listing wording rules 
 ## Listing notes
 
 - Mention the watermark and the one-time purchase that removes it.
-- Known limitations from `COMPATIBILITY.md`: TikTok and other apps that hand off video, and HDCP-protected video.
+- Known limitations from `docs/COMPATIBILITY.md`: TikTok and other apps that hand off video, and HDCP-protected video.

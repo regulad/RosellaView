@@ -24,7 +24,7 @@ id = "/com.amazon.kepler.appstore.iap.purchase.core@IAppstoreIAPPurchaseCoreServ
 [[wants.service]]
 id = "com.amazon.network.service"
 
-# Media services the W3C media player binds to (docs/DECISIONS.md D1).
+# Media services the W3C media player binds to (.claude/docs/DECISIONS.md D1).
 [[wants.service]]
 id = "com.amazon.mediametrics.service"
 

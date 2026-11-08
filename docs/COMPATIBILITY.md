@@ -1,6 +1,6 @@
 # What works with RosellaView
 
-RosellaView mirrors the screen of an iPhone, iPad or Mac and plays its audio. For the Appstore listing and support replies; protocol details are in `AIRPLAY.md`.
+RosellaView mirrors the screen of an iPhone, iPad or Mac and plays its audio. For the Appstore listing and support replies; protocol details are in `.claude/docs/AIRPLAY.md`.
 
 ## Works
 
