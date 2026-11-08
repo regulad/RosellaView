@@ -22,10 +22,16 @@ GOOD TO KNOW
 - Some apps "cast" their video to the TV instead of mirroring it, and may show only their controls.
 - If the picture doesn't appear, try Compatibility Mode under About & privacy on the start screen.
 
+TESTED AGAINST
+- Fire TV Stick 4K Select, software 2.0 (build 532)
+- iPhone 17 Pro (iPhone18,1), iOS 27.0.1 (24A446), mirroring software 980.77.1
+- iPad mini 4 (iPad5,1), iPadOS® 15.8.8 (19H422), mirroring software 620.8.2
+- MacBook (Retina, 12-inch, Early 2015) (MacBook8,1), macOS® Big Sur 11.7.11 (20G1443), mirroring software 550.10
+
 PRIVACY
 What you mirror stays on your network: it goes only from your device to this TV and is never recorded or sent anywhere else. RosellaView sends crash reports and diagnostics, including the model and system version of the device you mirror from, and nothing that identifies you. Privacy policy: https://regulad.github.io/RosellaView/
 
 OPEN SOURCE
 Based on UxPlay (GPLv3). Source code: https://github.com/regulad/RosellaView
 
-RosellaView is not affiliated with or endorsed by Apple Inc. Apple, iPhone, iPad, Mac and Safari are trademarks of Apple Inc., registered in the U.S. and other countries and regions. YouTube is a trademark of Google LLC.
+RosellaView is not affiliated with or endorsed by Apple Inc. Apple, iPhone, iPad, iPadOS, Mac, macOS, Big Sur and Safari are trademarks of Apple Inc., registered in the U.S. and other countries and regions. IOS is a trademark or registered trademark of Cisco in the U.S. and other countries and is used under license. YouTube is a trademark of Google LLC.

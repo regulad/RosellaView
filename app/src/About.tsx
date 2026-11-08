@@ -110,8 +110,9 @@ export const About = ({receiverName, onResetIdentity, compatibilityMode, onCompa
 
         <Heading>Trademarks</Heading>
         <Text style={styles.small}>
-          AirPlay is a trademark of Apple Inc., registered in the U.S. and other countries. RosellaView is not
-          affiliated with or endorsed by Apple Inc.
+          Apple, AirPlay, iPhone, iPad and Mac are trademarks of Apple Inc., registered in the U.S. and other countries
+          and regions. IOS is a trademark or registered trademark of Cisco in the U.S. and other countries and is used
+          under license. RosellaView is not affiliated with or endorsed by Apple Inc.
         </Text>
 
         <Heading>Settings</Heading>
