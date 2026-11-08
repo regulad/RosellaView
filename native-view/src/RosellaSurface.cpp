@@ -152,7 +152,8 @@ struct Bridge {
   rosella_video_latency_ms_fn latencyMs = nullptr;
   rosella_video_report_fn report = nullptr;
   rosella_video_status_fn status = nullptr;
-  rosella_audio_attach_fn audioAttach = nullptr;  // optional (older receivers lack it)
+  rosella_audio_attach_fn audioAttach = nullptr;  // optional (older receivers lack them)
+  rosella_audio_latency_ms_fn audioLatencyMs = nullptr;
 
   bool load() {
     void* lib = dlopen(ROSELLA_VIDEO_LIBRARY, RTLD_NOW | RTLD_NOLOAD);
@@ -166,6 +167,7 @@ struct Bridge {
     report = reinterpret_cast<rosella_video_report_fn>(sym("rosella_video_report"));
     status = reinterpret_cast<rosella_video_status_fn>(sym("rosella_video_status"));
     audioAttach = reinterpret_cast<rosella_audio_attach_fn>(sym("rosella_audio_attach"));
+    audioLatencyMs = reinterpret_cast<rosella_audio_latency_ms_fn>(sym("rosella_audio_latency_ms"));
     return attach && requestKeyframe && latencyMs && report && status;
   }
 };
@@ -596,11 +598,12 @@ static void renderThread(std::shared_ptr<SurfaceState> state, Ptr<kg::IMediaSurf
     rosella_video_consumer consumer{state.get(), onFrame, onReset};
     bridge.attach(&consumer);
 
-    // Spike (branch spike/native-audio): audio to the OS's PCM output too.
-    AudioOut audio([state](std::string const& m) { state->status(m); });
+    // Audio to the OS's PCM output, on the same clock as the pictures (D13).
+    auto audioLatency = bridge.audioLatencyMs ? bridge.audioLatencyMs : bridge.latencyMs;
+    AudioOut audio([state](std::string const& m) { state->status(m); }, [audioLatency] { return audioLatency(); });
     rosella_audio_consumer audioConsumer{
-        &audio, [](void* ctx, int16_t const* pcm, size_t frames, unsigned, unsigned, uint64_t senderNs) {
-          static_cast<AudioOut*>(ctx)->push(pcm, frames, senderNs);
+        &audio, [](void* ctx, int16_t const* pcm, size_t frames, unsigned, unsigned, uint64_t, uint64_t localNs) {
+          static_cast<AudioOut*>(ctx)->push(pcm, frames, localNs);
         }};
     if (bridge.audioAttach) {
       audio.start();

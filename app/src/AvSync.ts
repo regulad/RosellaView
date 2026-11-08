@@ -1,18 +1,18 @@
 /*
  * AvSync: keeps audio on the picture (lip sync).
  *
- * Audio plays in an MSE player (MirrorPlayer); video either in the native
- * pipeline (NativeVideo) or, as a fallback, in a second MSE player. Each knows
- * the sender's clock time of what it's showing or playing. Once a second the
- * two are compared; when they're out by more than the tolerance for
- * AV_BAD_CHECKS checks in a row:
- *   - native video: its capture-to-screen latency moves to match the audio,
- *     which costs nothing audible (DECISIONS.md D12);
- *   - MSE video, or beyond the native latency's bounds: the native audio
- *     pipeline drops upcoming audio (if it's late) or inserts silence (if it's
- *     early). Seeking Vega's live audio player doesn't move it.
- * Without this, a one-off hiccup in either player, or slow clock drift, stays
- * for the rest of the session (DECISIONS.md D8).
+ * Native pipeline (NativeVideo): pictures and sound both play at capture time
+ * plus one fixed latency, so there's nothing to correct; only the viewer's
+ * audio delay is applied (DECISIONS.md D13).
+ *
+ * MSE (Compatibility Mode): video and audio play in separate MSE players
+ * (MirrorPlayer), each of which knows the sender's clock time of what its
+ * playhead is playing. Once a second the two are compared; when audio is off
+ * by more than AV_TOLERANCE_MS for AV_BAD_CHECKS checks in a row, the native
+ * audio pipeline drops upcoming audio (if it's late) or inserts silence (if
+ * it's early). Seeking Vega's live audio player doesn't move it. Without this,
+ * a one-off hiccup in either player, or slow clock drift, stays for the rest
+ * of the session (DECISIONS.md D8).
  *
  * The viewer can add an audio delay (AvDelayOverlay) for what the timestamps
  * don't capture. It's kept per sender device.
@@ -23,24 +23,16 @@
 import {AsyncStorage} from '@amazon-devices/react-native-kepler';
 import {Receiver} from 'rosellaview-native';
 import type {MirrorPlayer} from './MirrorPlayer';
-import {NATIVE_SLEW_MS_PER_S, NativeVideo} from './NativeVideo';
+import {NativeVideo} from './NativeVideo';
 import {countEvent, log} from './Telemetry';
 
 // Out-of-sync tolerance. People notice sound ahead of the picture at about
 // 45 ms and behind it at about 125 ms (ITU-R BT.1359); ±80 ms is a fair middle.
 const AV_TOLERANCE_MS = 80;
-// Moving native video is cheap, so it's held closer. Its offset is judged on
-// the median of the last AV_NATIVE_SAMPLES readings: single readings of the
-// audio player's position jump by 100-400 ms either way.
-const AV_NATIVE_TOLERANCE_MS = 50;
-const AV_NATIVE_SAMPLES = 5;
 const AV_BAD_CHECKS = 2;
 // After a correction, wait this many checks: the shifted audio has to work
 // through the player's buffer (~0.5-1 s) before the offset can be measured.
 const AV_SETTLE_CHECKS = 4;
-// After a native latency change, at least this many checks, plus the time it
-// takes to ease in (NATIVE_SLEW_MS_PER_S).
-const AV_NATIVE_SETTLE_CHECKS = 1;
 // A new player gets this many checks to settle before it's measured.
 const AV_WARMUP_CHECKS = 5;
 // Bigger offsets mean something else broke (a stalled or restarted player);
@@ -68,7 +60,6 @@ export class AvSync {
   private warmup = AV_WARMUP_CHECKS;
   private lastV = NaN;
   private lastA = NaN;
-  private samples: number[] = [];
   /** Viewer's audio delay for the current sender (ms; positive plays audio later). */
   delayMs = 0;
   private senderId = '';
@@ -103,17 +94,15 @@ export class AvSync {
     const next = Math.min(AV_DELAY_MAX_MS, Math.max(AV_DELAY_MIN_MS, Math.round(ms)));
     const delta = next - this.delayMs;
     this.delayMs = next;
-    if (delta !== 0) {
-      // More delay: show video sooner, or insert silence (a negative shift);
-      // less: show video later, or drop audio.
+    if (this.video instanceof NativeVideo) {
+      this.video.setAudioDelay(next);
+    } else if (delta !== 0) {
+      // More delay: insert silence (a negative shift); less: drop audio.
       this.correct(-delta);
     }
     // Let the change play through before checking again, so the automatic
     // correction doesn't fight the viewer.
-    this.settle =
-      this.video instanceof NativeVideo
-        ? AV_NATIVE_SETTLE_CHECKS + Math.ceil(Math.abs(delta) / NATIVE_SLEW_MS_PER_S)
-        : AV_SETTLE_CHECKS;
+    this.settle = AV_SETTLE_CHECKS;
     this.bad = 0;
     if (this.senderId) {
       AsyncStorage.setItem(DELAY_KEY + this.senderId, String(this.delayMs)).catch(() => undefined);
@@ -121,18 +110,12 @@ export class AvSync {
   }
 
   /**
-   * Brings audio `ms` earlier relative to the picture (ms < 0: later). Native
-   * video takes it as that much more latency, as far as its bounds allow; the
-   * rest, or all of it with MSE video, is dropped from the audio (or, for
-   * ms < 0, inserted as silence). Returns the audio shift.
+   * Brings audio `ms` earlier relative to the picture (ms < 0: later): drops
+   * that much upcoming audio (or, for ms < 0, inserts silence). Returns the
+   * shift applied.
    */
   private correct(ms: number): number {
-    let rest = ms;
-    if (this.video instanceof NativeVideo) {
-      const before = this.video.latencyMs;
-      rest -= this.video.setLatency(before + ms) - before;
-    }
-    let shift = Math.max(-AV_MAX_STEP_MS, Math.min(AV_MAX_STEP_MS, Math.round(rest)));
+    let shift = Math.max(-AV_MAX_STEP_MS, Math.min(AV_MAX_STEP_MS, Math.round(ms)));
     if (shift > 0 && this.audio) {
       const ahead = this.audio.metrics()?.aheadMs ?? 0;
       shift = Math.min(shift, Math.max(0, ahead - AV_MIN_AUDIO_AHEAD_MS));
@@ -151,16 +134,16 @@ export class AvSync {
       this.warmup = AV_WARMUP_CHECKS;
       this.bad = 0;
       this.lastV = this.lastA = NaN;
-      this.samples = [];
     }
     this.offsetMs = NaN;
+    if (video instanceof NativeVideo) {
+      return; // one clock for both: nothing to correct
+    }
     if (!audio) {
       return;
     }
-    // Without video (audio-only), or with native video (which follows the
-    // audio), the player's own latency cap keeps it live.
-    const native = video instanceof NativeVideo;
-    audio.latencyCap = !video || native;
+    // Without video (audio-only), the player's own latency cap keeps it live.
+    audio.latencyCap = !video;
     if (!video) {
       return;
     }
@@ -182,47 +165,24 @@ export class AvSync {
     this.offsetMs = a - (v - this.delayMs);
     if (this.settle > 0) {
       this.settle--;
-      this.samples = [];
       return;
     }
-    if (native) {
-      this.samples.push(this.offsetMs);
-      if (this.samples.length < AV_NATIVE_SAMPLES) {
-        return;
-      }
-      this.samples = this.samples.slice(-AV_NATIVE_SAMPLES);
-      this.offsetMs = [...this.samples].sort((x, y) => x - y)[AV_NATIVE_SAMPLES >> 1];
-    }
-    const tolerance = native ? AV_NATIVE_TOLERANCE_MS : AV_TOLERANCE_MS;
-    if (Math.abs(this.offsetMs) <= tolerance || Math.abs(this.offsetMs) > AV_MAX_PLAUSIBLE_MS) {
+    if (Math.abs(this.offsetMs) <= AV_TOLERANCE_MS || Math.abs(this.offsetMs) > AV_MAX_PLAUSIBLE_MS) {
       this.bad = 0;
       return;
     }
-    if (!native && ++this.bad < AV_BAD_CHECKS) {
+    if (++this.bad < AV_BAD_CHECKS) {
       return;
     }
     this.bad = 0;
-    this.samples = [];
     this.settle = AV_SETTLE_CHECKS;
-    // Late audio (negative offset): more video latency, or drop audio so it
-    // plays sooner; early: less video latency, or insert silence.
-    const latencyBefore = native ? (video as NativeVideo).latencyMs : 0;
+    // Late audio (negative offset): drop so it plays sooner; early: insert silence.
     const shift = this.correct(-this.offsetMs);
-    const moved = native ? (video as NativeVideo).latencyMs - latencyBefore : 0;
-    if (native) {
-      this.settle = AV_NATIVE_SETTLE_CHECKS + Math.ceil(Math.abs(moved) / NATIVE_SLEW_MS_PER_S);
-    }
-    if (shift === 0 && moved === 0) {
+    if (shift === 0) {
       return;
     }
     this.corrections++;
     countEvent('av.corrections');
-    log(
-      `av sync: audio ${this.offsetMs.toFixed(0)}ms off target: ` +
-        (native
-          ? `video latency ${moved >= 0 ? '+' : ''}${moved}ms (now ${(video as NativeVideo).latencyMs}ms), `
-          : '') +
-        `audio shift ${shift}ms (#${this.corrections})`,
-    );
+    log(`av sync: audio ${this.offsetMs.toFixed(0)}ms off target, shifting ${shift}ms (#${this.corrections})`);
   }
 }

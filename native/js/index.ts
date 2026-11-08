@@ -25,6 +25,7 @@ interface NativeReceiver {
   setWatermark(on: boolean): boolean;
   getStats(): string;
   setVideoLatency(ms: number): boolean;
+  setAudioLatency(ms: number): boolean;
   nativeVideo(): string;
 }
 
@@ -94,6 +95,8 @@ export const Receiver = {
   setWatermark: (on: boolean): boolean => native.setWatermark(on),
   /** Native video: how long after capture frames are shown (ms). */
   setVideoLatency: (ms: number): boolean => native.setVideoLatency(Math.round(ms)),
+  /** Native audio: how long after capture audio is heard (ms): video's latency plus the audio delay. */
+  setAudioLatency: (ms: number): boolean => native.setAudioLatency(Math.round(ms)),
   nativeVideo: (): NativeVideoState => JSON.parse(native.nativeVideo()) as NativeVideoState,
   stats: (): Record<string, unknown> => JSON.parse(native.getStats()) as Record<string, unknown>,
 };

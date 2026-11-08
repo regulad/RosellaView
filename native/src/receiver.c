@@ -33,6 +33,7 @@
 #include "sps.h"
 #include "logger.h"
 #include "raop.h"
+#include "raop_ntp.h"
 #include "stream.h"
 
 static receiver_event_sink g_sink;
@@ -327,9 +328,9 @@ static void cb_report_client_details(void *cls, const char *os_name, const char 
 /* ---------- native video (rosella_video.h) ---------- */
 
 #define ROSELLA_EXPORT __attribute__((visibility("default")))
-/* Initial capture-to-screen latency for native video; A/V sync then moves it
- * to match the audio player (app/src/AvSync.ts). */
-#define NATIVE_LATENCY_DEFAULT_MS 350
+/* Capture-to-screen (and -sound) latency for native video and audio until JS
+ * sets it: 150 ms, or 700 in Bad LAN/Wi-Fi Mode (app/src/NativeVideo.ts). */
+#define NATIVE_LATENCY_DEFAULT_MS 150
 
 static pthread_mutex_t g_consumer_lock = PTHREAD_MUTEX_INITIALIZER;
 static rosella_video_consumer g_consumer;
@@ -365,11 +366,20 @@ ROSELLA_EXPORT int rosella_video_attach(const rosella_video_consumer *consumer) 
 /* Native audio: under g_audio_lock, like g_audio. */
 static rosella_audio_consumer g_audio_consumer;
 static int g_audio_consumer_on;
+static raop_ntp_t *g_audio_ntp; /* the current connection's clock sync, for local times */
+static atomic_int g_native_audio_latency_ms = NATIVE_LATENCY_DEFAULT_MS;
 
 static void native_pcm(void *ctx, const int16_t *pcm, size_t frames, uint64_t sender_ns) {
+    uint64_t local_ns = 0;
     (void)ctx; /* called under g_audio_lock, from audio_push */
-    if (g_audio_consumer_on) g_audio_consumer.pcm(g_audio_consumer.ctx, pcm, frames, 44100, 2, sender_ns);
+    if (!g_audio_consumer_on) return;
+    if (sender_ns && g_audio_ntp) local_ns = raop_ntp_convert_remote_time(g_audio_ntp, sender_ns);
+    g_audio_consumer.pcm(g_audio_consumer.ctx, pcm, frames, 44100, 2, sender_ns, local_ns);
 }
+
+ROSELLA_EXPORT int rosella_audio_latency_ms(void) { return atomic_load(&g_native_audio_latency_ms); }
+
+void receiver_set_audio_latency(int ms) { atomic_store(&g_native_audio_latency_ms, ms); }
 
 ROSELLA_EXPORT int rosella_audio_attach(const rosella_audio_consumer *consumer) {
     pthread_mutex_lock(&g_audio_lock);
@@ -526,10 +536,10 @@ static void cb_video_process(void *cls, raop_ntp_t *ntp, video_decode_struct *da
 
 static void cb_audio_process(void *cls, raop_ntp_t *ntp, audio_decode_struct *data) {
     (void)cls;
-    (void)ntp;
     atomic_fetch_add(&g_audio_packets, 1);
     atomic_fetch_add(&g_audio_bytes, (uint_fast64_t)data->data_len);
     pthread_mutex_lock(&g_audio_lock);
+    g_audio_ntp = ntp;
     if (g_audio) audio_push(g_audio, data->data, (size_t)data->data_len, data->rtp_time, data->ntp_time_remote);
     pthread_mutex_unlock(&g_audio_lock);
 }

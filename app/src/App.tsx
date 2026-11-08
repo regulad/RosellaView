@@ -42,6 +42,8 @@ const SCREEN = Dimensions.get('window');
 const KEYFRAME_EVERY_TICKS = 2;
 // Compatibility Mode (About screen): MSE video instead of the native pipeline.
 const COMPATIBILITY_KEY = 'compatibilityMode';
+// Bad LAN/Wi-Fi Mode (About screen): native latency 700 ms instead of 150.
+const BAD_NETWORK_KEY = 'badNetworkMode';
 
 /** Largest box of the video's aspect ratio that fits the screen, centred. */
 function fit(w: number, h: number) {
@@ -69,6 +71,9 @@ export const App = () => {
   const useNative = useRef(true);
   useNative.current = !compatibility;
   const nativeVideo = useRef<NativeVideo | null>(null);
+  const [badNetwork, setBadNetwork] = useState(false);
+  const badNetworkRef = useRef(false);
+  badNetworkRef.current = badNetwork;
   const [showAbout, setShowAbout] = useState(false);
   const audio = useRef<MirrorPlayer | null>(null);
   const audioCt = useRef(0);
@@ -88,6 +93,12 @@ export const App = () => {
     };
 
     Receiver.onAudio((kind, segment, senderMs) => {
+      // Native playback takes mirrored audio itself (as PCM): no MSE player,
+      // which would only compete for audio focus.
+      if (nativeVideo.current) {
+        closeAudio();
+        return;
+      }
       if (kind === SegmentKind.Init) {
         // Each audio stream (mirroring, or music) starts with a new init segment.
         closeAudio();
@@ -137,6 +148,7 @@ export const App = () => {
           setSender(String(e.name));
           avSync.useSender(String(e.deviceid)).then((ms) => {
             setAvDelay(ms);
+            nativeVideo.current?.setAudioDelay(ms);
             log(`av delay for ${String(e.model)}: ${ms}ms`);
           });
           break;
@@ -164,8 +176,7 @@ export const App = () => {
           setMirroring(Boolean(e.running));
           if (e.running) {
             setAudioOnly(false);
-            // Each session starts from the default latency.
-            nativeVideo.current = useNative.current ? new NativeVideo() : null;
+            nativeVideo.current = useNative.current ? new NativeVideo(badNetworkRef.current, avSync.delayMs) : null;
           }
           if (!e.running) {
             closePlayer();
@@ -261,7 +272,16 @@ export const App = () => {
     AsyncStorage.getItem(COMPATIBILITY_KEY)
       .then((v) => setCompatibility(v === '1'))
       .catch(() => undefined);
+    AsyncStorage.getItem(BAD_NETWORK_KEY)
+      .then((v) => setBadNetwork(v === '1'))
+      .catch(() => undefined);
   }, []);
+  const onBadNetworkMode = (on: boolean) => {
+    setBadNetwork(on);
+    nativeVideo.current?.setBadNetwork(on);
+    log(`bad network mode ${on ? 'on' : 'off'}`);
+    AsyncStorage.setItem(BAD_NETWORK_KEY, on ? '1' : '0').catch(() => undefined);
+  };
   const onCompatibilityMode = (on: boolean) => {
     setCompatibility(on);
     log(`compatibility mode ${on ? 'on' : 'off'}`);
@@ -337,6 +357,8 @@ export const App = () => {
         onResetIdentity={() => log(`identity reset -> ${Receiver.resetIdentity()}`)}
         compatibilityMode={compatibility}
         onCompatibilityMode={onCompatibilityMode}
+        badNetworkMode={badNetwork}
+        onBadNetworkMode={onBadNetworkMode}
         onClose={() => setShowAbout(false)}
       />
     );

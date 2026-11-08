@@ -74,18 +74,25 @@ typedef int (*rosella_video_latency_ms_fn)(void);
 void rosella_video_report(const rosella_video_stats *stats);
 typedef void (*rosella_video_report_fn)(const rosella_video_stats *);
 
-/* Native audio output: mixed PCM (interleaved s16) with the sender time of its
- * first frame. While attached, mirrored audio goes here instead of to MSE.
- * Called on libairplay's audio thread; must return quickly. */
+/* Native audio output: mixed PCM (interleaved s16) with the capture time of its
+ * first frame, on the sender's clock and on this device's CLOCK_REALTIME (as
+ * video's local_ns; 0 if unknown). While attached, mirrored audio goes here
+ * instead of to MSE. Called on libairplay's audio thread; must return quickly. */
 typedef struct {
     void *ctx;
-    void (*pcm)(void *ctx, const int16_t *pcm, size_t frames, unsigned rate, unsigned channels, uint64_t sender_ns);
+    void (*pcm)(void *ctx, const int16_t *pcm, size_t frames, unsigned rate, unsigned channels, uint64_t sender_ns,
+                uint64_t local_ns);
 } rosella_audio_consumer;
 
 /* Attaches (or with NULL detaches) the audio consumer; returns ROSELLA_VIDEO_ABI.
  * Detaching waits for a call in progress to finish. */
 int rosella_audio_attach(const rosella_audio_consumer *consumer);
 typedef int (*rosella_audio_attach_fn)(const rosella_audio_consumer *);
+
+/* How long after capture (local_ns) audio should be heard, in ms: the video
+ * latency plus the viewer's audio delay. Set from JS (Receiver.setAudioLatency). */
+int rosella_audio_latency_ms(void);
+typedef int (*rosella_audio_latency_ms_fn)(void);
 
 /* A status line (decoder starts, restarts, errors), sent to JS as a
  * "native_status" receiver event, and so to Sentry. */

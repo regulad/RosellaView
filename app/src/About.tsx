@@ -1,8 +1,9 @@
 /*
  * About & privacy: the licence notices AGPL §5(d) asks an interactive program
  * to show, the third-party notices, the privacy disclosure, and at the end
- * the settings: the Compatibility Mode checkbox (MSE video instead of the
- * native pipeline, DECISIONS.md D12) and resetting the receiver's identity.
+ * the settings: Compatibility Mode (MSE playback instead of the native
+ * pipeline, DECISIONS.md D12), Bad LAN/Wi-Fi Mode (native latency 700 ms
+ * instead of 150, D13) and resetting the receiver's identity.
  *
  * One column, scrolled by the platform's own focus handling: the headings are
  * focusable (Vega's `focusable` on View), so up/down moves focus section by
@@ -30,6 +31,8 @@ type Props = {
   onResetIdentity: () => void;
   compatibilityMode: boolean;
   onCompatibilityMode: (on: boolean) => void;
+  badNetworkMode: boolean;
+  onBadNetworkMode: (on: boolean) => void;
   onClose: () => void;
 };
 
@@ -52,7 +55,29 @@ const Heading = ({children}: {children: React.ReactNode}) => (
   </View>
 );
 
-export const About = ({receiverName, onResetIdentity, compatibilityMode, onCompatibilityMode, onClose}: Props) => {
+/** A setting: "Label [✓]". */
+const Checkbox = ({label, checked, onChange}: {label: string; checked: boolean; onChange: (on: boolean) => void}) => (
+  <Pressable onPress={() => onChange(!checked)} style={styles.checkRow}>
+    {({focused}) => (
+      <>
+        <Text style={[styles.checkLabel, focused && styles.lit]}>{label}</Text>
+        <View style={[styles.box, focused && styles.boxLit]}>
+          {checked ? <Text style={[styles.check, focused && styles.lit]}>✓</Text> : null}
+        </View>
+      </>
+    )}
+  </Pressable>
+);
+
+export const About = ({
+  receiverName,
+  onResetIdentity,
+  compatibilityMode,
+  onCompatibilityMode,
+  badNetworkMode,
+  onBadNetworkMode,
+  onClose,
+}: Props) => {
   const [confirming, setConfirming] = useState(false);
   useEffect(() => {
     if (!confirming) {
@@ -116,19 +141,15 @@ export const About = ({receiverName, onResetIdentity, compatibilityMode, onCompa
         </Text>
 
         <Heading>Settings</Heading>
-        <Pressable onPress={() => onCompatibilityMode(!compatibilityMode)} style={styles.checkRow}>
-          {({focused}) => (
-            <>
-              <Text style={[styles.checkLabel, focused && styles.lit]}>Compatibility Mode</Text>
-              <View style={[styles.box, focused && styles.boxLit]}>
-                {compatibilityMode ? <Text style={[styles.check, focused && styles.lit]}>✓</Text> : null}
-              </View>
-            </>
-          )}
-        </Pressable>
+        <Checkbox label="Compatibility Mode" checked={compatibilityMode} onChange={onCompatibilityMode} />
         <Text style={styles.small}>
           Compatibility Mode plays mirrored video through the TV's standard video player. Try it if the picture doesn't
           appear. The brightest highlights and the darkest shadows will lose fidelity when this option is on.
+        </Text>
+        <Checkbox label="Bad LAN/Wi-Fi Mode" checked={badNetworkMode} onChange={onBadNetworkMode} />
+        <Text style={styles.small}>
+          Bad LAN/Wi-Fi Mode waits longer for the picture and sound to arrive: about 0.7 seconds instead of 0.15. Try it
+          if mirroring stutters or the sound drops out.
         </Text>
         <Pressable
           onPress={() => {

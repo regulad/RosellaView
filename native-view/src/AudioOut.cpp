@@ -7,7 +7,10 @@
  */
 #include "AudioOut.h"
 
+#include <time.h>
+
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstring>
 #include <exception>
@@ -49,6 +52,18 @@ T named(char const* value) {
 constexpr int kRate = 44100;
 constexpr int kChannels = 2;
 constexpr int kBytesPerFrame = kChannels * 2;
+// Audio heard within this of its due time plays as it is; beyond it, it waits
+// (silence is written) or its late samples are dropped. A little over one
+// buffer (705 frames, 16 ms), so steady playback never trips it.
+constexpr int64_t kSlackNs = 40'000'000;
+// More queued audio than this is stale (a stalled stream): it's dropped.
+constexpr size_t kMaxQueuedFrames = (size_t)kRate * 3;
+
+uint64_t realtimeNs() {
+  timespec t;
+  clock_gettime(CLOCK_REALTIME, &t);
+  return (uint64_t)t.tv_sec * 1'000'000'000ull + (uint64_t)t.tv_nsec;
+}
 
 struct FocusListener : ApmfBase<FocusListener, ka::IFocusChangedListener> {
   explicit FocusListener(AudioOut::Log log) : log_(std::move(log)) {}
@@ -77,7 +92,7 @@ struct StreamListener : ApmfBase<StreamListener, ka::IAudioStreamEventListener> 
 
 }  // namespace
 
-AudioOut::AudioOut(Log log) : log_(std::move(log)) {}
+AudioOut::AudioOut(Log log, std::function<int()> latencyMs) : log_(std::move(log)), latencyMs_(std::move(latencyMs)) {}
 
 AudioOut::~AudioOut() { stop(); }
 
@@ -96,14 +111,19 @@ void AudioOut::stop() {
   if (thread_.joinable()) thread_.join();
 }
 
-void AudioOut::push(int16_t const* pcm, size_t frames, uint64_t) {
+void AudioOut::push(int16_t const* pcm, size_t frames, uint64_t localNs) {
   {
     std::lock_guard<std::mutex> lock(mutex_);
-    queue_.insert(queue_.end(), pcm, pcm + frames * kChannels);
-    // A spike: never hold more than a second.
-    while (queue_.size() > (size_t)kRate * kChannels) queue_.pop_front();
+    Chunk c;
+    c.pcm.assign(pcm, pcm + frames * kChannels);
+    c.localNs = localNs;
+    queue_.push_back(std::move(c));
+    queuedFrames_ += frames;
+    while (queuedFrames_ > kMaxQueuedFrames) {
+      queuedFrames_ -= queue_.front().pcm.size() / kChannels - queue_.front().pos;
+      queue_.pop_front();
+    }
   }
-  pushedFrames_ += frames;
   wake_.notify_all();
 }
 
@@ -167,10 +187,11 @@ void AudioOut::run() {
          std::to_string(playback->getLatencyInMs()) + " ms" + (attributes.flags.lowLatency ? " (lowLatency)" : ""));
 
     // Prime with silence, then start (the guide's advice against underruns).
-    std::vector<uint8_t> chunk((size_t)perBuffer * kBytesPerFrame, 0);
+    std::vector<int16_t> out((size_t)perBuffer * kChannels, 0);
+    auto view = [&] { return apmf::ArrayView<uint8_t>(reinterpret_cast<uint8_t*>(out.data()), out.size() * 2); };
     for (int i = 0; i < playback->getBufferCount(); i++) {
       try {
-        playback->write(apmf::ArrayView<uint8_t>(chunk.data(), chunk.size()));
+        playback->write(view());
       } catch (std::exception const&) {
         break;  // full
       }
@@ -178,45 +199,73 @@ void AudioOut::run() {
     playback->start();
     log_("audio: started");
 
+    // Each buffer: the queued audio due when it will be heard (now + the
+    // stream's latency), or silence.
+    uint64_t const nsPerFrame = 1'000'000'000ull / kRate;
+    int64_t streamLatencyNs = (int64_t)playback->getLatencyInMs() * 1'000'000;
     auto lastReport = std::chrono::steady_clock::now();
-    uint64_t written = 0, blocked = 0;
+    uint64_t played = 0, silence = 0, dropped = 0, waited = 0, errors = 0;
     for (;;) {
+      bool audible = false;
       {
         std::unique_lock<std::mutex> lock(mutex_);
-        wake_.wait_for(lock, std::chrono::milliseconds(5),
-                       [&] { return stop_ || queue_.size() >= (size_t)perBuffer * kChannels; });
         if (stop_) break;
-        if (queue_.size() >= (size_t)perBuffer * kChannels) {
-          auto* out = reinterpret_cast<int16_t*>(chunk.data());
-          std::copy_n(queue_.begin(), (size_t)perBuffer * kChannels, out);
-          queue_.erase(queue_.begin(), queue_.begin() + (size_t)perBuffer * kChannels);
-        } else {
-          chunk.clear();
+        int64_t const heardAt = (int64_t)realtimeNs() + streamLatencyNs;
+        int64_t const latencyNs = (int64_t)latencyMs_() * 1'000'000;
+        auto dueOf = [&](Chunk const& c) {
+          return c.localNs ? (int64_t)(c.localNs + c.pos * nsPerFrame) + latencyNs : heardAt;
+        };
+        // Late: drop what should already have been heard.
+        while (!queue_.empty() && dueOf(queue_.front()) < heardAt - kSlackNs) {
+          Chunk& c = queue_.front();
+          size_t const frames = c.pcm.size() / kChannels;
+          size_t const late = (size_t)((heardAt - dueOf(c)) / (int64_t)nsPerFrame);
+          size_t const skip = std::min(late, frames - c.pos);
+          c.pos += skip;
+          queuedFrames_ -= skip;
+          dropped += skip;
+          if (c.pos >= frames) queue_.pop_front();
+        }
+        if (!queue_.empty() && dueOf(queue_.front()) <= heardAt + kSlackNs) {
+          audible = true;
+          size_t filled = 0;
+          while (filled < (size_t)perBuffer && !queue_.empty()) {
+            Chunk& c = queue_.front();
+            size_t const frames = c.pcm.size() / kChannels;
+            size_t const take = std::min((size_t)perBuffer - filled, frames - c.pos);
+            std::copy_n(c.pcm.begin() + c.pos * kChannels, take * kChannels, out.begin() + filled * kChannels);
+            c.pos += take;
+            filled += take;
+            queuedFrames_ -= take;
+            if (c.pos >= frames) queue_.pop_front();
+          }
+          std::fill(out.begin() + filled * kChannels, out.end(), 0);
+        } else if (!queue_.empty()) {
+          waited++;
         }
       }
-      if (!chunk.empty()) {
-        try {
-          playback->write(apmf::ArrayView<uint8_t>(chunk.data(), chunk.size()));  // blocks while full
-          written += perBuffer;
-        } catch (std::exception const& e) {
-          blocked++;
-        }
+      if (!audible) std::fill(out.begin(), out.end(), 0);
+      try {
+        playback->write(view());  // blocks while the stream's buffers are full
+        (audible ? played : silence) += perBuffer;
+      } catch (std::exception const&) {
+        errors++;
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
       }
-      chunk.resize((size_t)perBuffer * kBytesPerFrame);
 
       auto const now = std::chrono::steady_clock::now();
-      if (now - lastReport > std::chrono::seconds(5)) {
+      if (now - lastReport > std::chrono::seconds(30)) {
         lastReport = now;
+        streamLatencyNs = (int64_t)playback->getLatencyInMs() * 1'000'000;
         size_t queued;
         {
           std::lock_guard<std::mutex> lock(mutex_);
-          queued = queue_.size() / kChannels;
+          queued = queuedFrames_;
         }
-        log_("audio: latency " + std::to_string(playback->getLatencyInMs()) + " ms, queued here " + ms(queued) +
-             ", underruns " + std::to_string(playback->getUnderrunCount()) + " (" +
-             std::to_string(streamListener->underruns.load()) + " events, " +
-             ms(streamListener->underrunFrames.load()) + "), written " + ms(written) + " of " +
-             ms(pushedFrames_.load()) + " received, write errors " + std::to_string(blocked) +
+        log_("audio: stream latency " + std::to_string(streamLatencyNs / 1'000'000) + " ms, target " +
+             std::to_string(latencyMs_()) + " ms, queued " + ms(queued) + "; played " + ms(played) + ", silence " +
+             ms(silence) + ", dropped late " + ms(dropped) + ", waits " + std::to_string(waited) + ", underruns " +
+             std::to_string(playback->getUnderrunCount()) + ", write errors " + std::to_string(errors) +
              (streamListener->died ? ", stream died" : ""));
       }
     }

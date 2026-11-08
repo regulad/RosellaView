@@ -280,3 +280,29 @@ The laptop's `create_ap` AP now runs with `IEEE80211N=1`, started via `create_ap
 - With native video, the iPhone's lip sync is right at 0 ms delay. It needed +300 ms on MSE.
 
 **Risk:** `media_transform` is outside the OS compatibility contract. An OS update could break it; viewers can then turn on Compatibility Mode, and we'd ship a fix (plan B: FFmpeg software decode, which keeps full range).
+
+## D13. Native audio: the OS's PCM output, on the video's clock, at a fixed latency (2026-11-08)
+
+**Decision:** With native video (D12), mirrored audio no longer goes through the MSE player either. The receiver hands the mixed PCM to the surface component, which writes it to an `IAudioStreamPlayback` (`/com.amazon.kepler.audiostream`, a documented public API). Pictures and sound both play at capture time plus one fixed latency: **150 ms**, or **700 ms** in **Bad LAN/Wi-Fi Mode** (About). The automatic A/V sync (D8) is off on this path; the viewer's audio delay is added to the audio latency.
+
+**Why:**
+- **The MSE audio player set the floor.** Its ~0.5 s buffer held native video at 300–500 ms, and its coarse clock made the old sync saw-tooth (1,036 corrections in a 2.5 h soak).
+- **What the stream offers** (Fire TV Stick 4K Select, spike 2026-11-08):
+  - minimum buffer 705 × 2 frames (31 ms), the same with `lowLatency`
+  - reported latency 72–73 ms
+  - zero underruns over minutes of playback
+  - focus granted at once
+  - with it, the owner saw end-to-end latency under 0.4 s with lip sync perfect
+
+**How:**
+- **Bridge:** `rosella_audio_attach` gives the component mixed PCM (after concealment and the spoken watermark) with its capture time. `local_ns` is converted with libairplay's own `raop_ntp_convert_remote_time`, so audio and video share one clock. While attached, audio skips the FLAC/MSE path, and JS opens no MSE audio player.
+- **`AudioOut` writes one 31 ms buffer at a time:**
+  - the queued audio due when it will be heard (now + the stream's latency), if within ±40 ms;
+  - otherwise silence, while audio is early or absent, so the stream never underruns;
+  - audio already late by more than that is dropped.
+  - No rate correction (`setSpeed`) and no adaptive latency (owner's call): the ±40 ms window is the only correction.
+- **Latency:**
+  - `Receiver.setVideoLatency` / `setAudioLatency`, from `NativeVideo`.
+  - Audio = video latency + the viewer's delay, never under 50 ms: sound can't be heard before it arrives, and a lower target would only drop it.
+
+**Compatibility Mode** keeps the MSE path for both, with D8's sync.

@@ -60,6 +60,8 @@ int receiver_request_keyframe(void);
 /* Native video (rosella_video.h): the capture-to-screen latency the
  * consumer aims for, in ms; and its state as a JSON string (caller frees). */
 void receiver_set_video_latency(int ms);
+/* Native audio: the capture-to-sound latency (video's plus the audio delay). */
+void receiver_set_audio_latency(int ms);
 char *receiver_native_video_json(void);
 
 /* Running counters since receiver_start(), as a JSON string (caller frees). */
