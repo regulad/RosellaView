@@ -9,12 +9,12 @@ The owner does the submission; nothing here is automated. Listing wording rules 
 - [x] In-app About & privacy screen: AGPL §5(d) notices, third-party notices, trademark notice, privacy disclosure.
 - [x] Source published at https://github.com/regulad/RosellaView (`SOURCE_URL` in `app/src/About.tsx`); the UxPlay fork is at https://github.com/regulad/UxPlay (branch `rosella`). Push before each release, so the shipped commit is public.
 - [x] Privacy policy hosted at https://regulad.github.io/RosellaView/ (GitHub Pages, branch `gh-pages`, `index.md`). It's a copy of `docs/PRIVACY.md`: update both together. Enter the URL in the portal.
-- [ ] Release build, by tag (`.github/workflows/release.yml`):
-  1. Bump `version` in `app/package.json` and `app/manifest.toml`, and `build-number` in the manifest.
-  2. Commit and push, then `git tag vX.Y.Z && git push origin vX.Y.Z`.
-  3. CI runs the checks and builds with the pinned SDK (`VEGA_SDK_VERSION`, about 12 min). Source maps and debug files go to Sentry (secret `SENTRY_AUTH_TOKEN`, an organization token), and the `.vpkg` files to the GitHub Release for the tag.
-  4. Upload `rosellaview_armv7.vpkg`, the only one, in the Developer Console. It's the Fire TV Stick build, and Amazon's build docs name `armv7-release/*_armv7.vpkg` as the one to submit. `x86_64` and `aarch64` are for the Vega Virtual Device only. The Appstore's submission API doesn't take Vega packages yet.
-  - Sentry release names: tagged builds are `rosellaview@<version>`; any other build gets `+<sha>` (and `-dirty.<time>` if uncommitted). v0.1.0 predates this and is `rosellaview@0.1.0+95fd4e1b7866`.
+- [ ] Release build, by tag (`.github/workflows/release.yml`). Releases are identified by the manifest's `build-number` alone, the only number the Appstore uses:
+  1. Increase `build-number` in `app/manifest.toml`. (`version` there and in `app/package.json` is required by Vega but otherwise unused.)
+  2. Commit and push, then tag the build number: `git tag 4 && git push origin 4`.
+  3. CI checks that the tag equals `build-number`, runs the checks and builds with the pinned SDK (`VEGA_SDK_VERSION`). Source maps and debug files go to Sentry (secret `SENTRY_AUTH_TOKEN`, an organization token) as release `rosellaview@<build>`, and the `.vpkg` to the GitHub Release for the tag.
+  4. Upload `rosellaview_armv7.vpkg` in the Developer Console. It's the Fire TV Stick build, and Amazon's build docs name `armv7-release/*_armv7.vpkg` as the one to submit. The Appstore's submission API doesn't take Vega packages yet.
+  - Sentry release names: tagged builds are `rosellaview@<build>`; other builds get `+<sha>` (and `-dirty.<time>` if uncommitted). Builds 1 and 2 predate this: `rosellaview@0.1.0+95fd4e1b7866` (tag `v0.1.0`) and `rosellaview@0.1.1` (tag `v0.1.1`).
   - A manual run (Actions → Release → Run workflow) is a dry run: it keeps the packages as an artifact, with no release and no Sentry upload.
 - [ ] Lawyer review: playfair (GPLv3) and DECISIONS.md D10 (APMF glue as a System Library).
 

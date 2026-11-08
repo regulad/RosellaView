@@ -34,7 +34,10 @@ else
   in_vega() { distrobox enter vega -- bash -lc "$1"; }
 fi
 
-VERSION=$(node -p "require('$APP/package.json').version")
+# Releases are identified by the manifest's build-number alone: it's what the
+# Appstore uses, and the tag a release is built from (scripts/build.sh, CI).
+BUILD_NUMBER=$(sed -n 's/^build-number *= *\([0-9][0-9]*\).*/\1/p' "$APP/manifest.toml")
+[ -n "$BUILD_NUMBER" ] || { echo "no build-number in $APP/manifest.toml" >&2; exit 1; }
 GIT=$(git -C "$ROOT" rev-parse --short=12 HEAD)
 # app/package-lock.json changes on every build (the local module tarball's
 # checksum), so it doesn't count.
@@ -43,14 +46,14 @@ if ! git -C "$ROOT" diff --quiet HEAD -- app native native-view ':!app/package-l
   # can't be confused with another build's.
   GIT="$GIT-dirty.$(date +%s)"
 fi
-RELEASE="rosellaview@$VERSION+$GIT"
-# A clean production build of the commit tagged v<version> (CI's release
-# builds) is just the version: rosellaview@0.1.0. Development builds keep the
+RELEASE="rosellaview@$BUILD_NUMBER+$GIT"
+# A clean production build of the commit tagged with the build number (CI's
+# release builds: tag "3") is just that: rosellaview@3. Other builds keep the
 # sha, so their source maps never land in the release's.
 TAG=${GITHUB_REF_TYPE:+${GITHUB_REF_NAME}}
 [ -n "$TAG" ] || TAG=$(git -C "$ROOT" describe --exact-match --tags HEAD 2> /dev/null || true)
-if [ "$ENVIRONMENT" = production ] && [ "$TAG" = "v$VERSION" ] && [ "${GIT%%-dirty*}" = "$GIT" ]; then
-  RELEASE="rosellaview@$VERSION"
+if [ "$ENVIRONMENT" = production ] && [ "$TAG" = "$BUILD_NUMBER" ] && [ "${GIT%%-dirty*}" = "$GIT" ]; then
+  RELEASE="rosellaview@$BUILD_NUMBER"
 fi
 DIST=vega
 

@@ -1,4 +1,4 @@
-# On a version tag (v0.1.0): the checks, then a production build with the
+# On a build-number tag (3): the checks, then a production build with the
 # pinned Vega SDK. The .vpkg files go to a GitHub Release, and the source maps
 # and native debug files to Sentry. Uploading to the Appstore stays manual:
 # its submission API doesn't take Vega packages yet.
@@ -15,7 +15,8 @@ name: Release
 
 on:
   push:
-    tags: ['v*']
+    # The manifest's build-number, the only release identifier (Appstore).
+    tags: ['[0-9]*']
   workflow_dispatch:
 
 env:
@@ -47,11 +48,11 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Tag matches the app version
+      - name: Tag matches the build number
         if: github.ref_type == 'tag'
         run: |
-          version=$(node -p "require('./app/package.json').version")
-          [ "${GITHUB_REF_NAME}" = "v${version}" ] || { echo "tag ${GITHUB_REF_NAME} != v${version}"; exit 1; }
+          build=$(sed -n 's/^build-number *= *\([0-9][0-9]*\).*/\1/p' app/manifest.toml)
+          [ "${GITHUB_REF_NAME}" = "${build}" ] || { echo "tag ${GITHUB_REF_NAME} != build-number ${build}"; exit 1; }
 
       - uses: actions/setup-node@v4
         with:
@@ -133,5 +134,5 @@ jobs:
         run: |
           # armv7 is the Fire TV Stick build, and the one Amazon's docs say to
           # submit; x86_64 and aarch64 are only for the Vega Virtual Device.
-          gh release create "${GITHUB_REF_NAME}" out/rosellaview_armv7.vpkg --title "RosellaView ${GITHUB_REF_NAME}" \
+          gh release create "${GITHUB_REF_NAME}" out/rosellaview_armv7.vpkg --title "RosellaView build ${GITHUB_REF_NAME}" \
             --notes "Production build of ${GITHUB_SHA}. Submit rosellaview_armv7.vpkg in the Amazon Developer Console."

@@ -114,7 +114,7 @@ export const About = ({
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
         <View focusable hasTVPreferredFocus>
           <Text style={styles.title}>RosellaView</Text>
-          <Text style={styles.body}>Version {BUILD.release.replace(/^rosellaview@/, '')}</Text>
+          <Text style={styles.body}>Build {BUILD.release.replace(/^rosellaview@/, '')}</Text>
         </View>
 
         <Heading>Privacy</Heading>
