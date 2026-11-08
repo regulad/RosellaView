@@ -19,6 +19,7 @@ import {BUILD} from './buildInfo';
 
 export const SOURCE_URL = 'https://github.com/regulad/RosellaView';
 export const PRIVACY_URL = 'https://regulad.github.io/RosellaView/';
+const ISSUES_URL = 'github.com/regulad/RosellaView/issues';
 const LICENSE_URL = 'https://www.gnu.org/licenses/agpl-3.0.html';
 // The author's mark (docs/brand/ParkerWahle.svg, white for dark backgrounds),
 // rendered at twice the size it's shown.
@@ -115,6 +116,7 @@ export const About = ({
         <View focusable hasTVPreferredFocus>
           <Text style={styles.title}>RosellaView</Text>
           <Text style={styles.body}>Build {BUILD.release.replace(/^rosellaview@/, '')}</Text>
+          <Text style={[styles.small, styles.report]}>Found a problem? Report it at {ISSUES_URL}</Text>
         </View>
 
         <Heading>Privacy</Heading>
@@ -242,5 +244,6 @@ const styles = StyleSheet.create({
   boxLit: {borderColor: '#fff', backgroundColor: '#333'},
   check: {color: '#ddd', fontSize: 24, fontWeight: 'bold', lineHeight: 28},
   lit: {color: '#fff'},
+  report: {marginTop: 12},
   disabled: {opacity: 0.4},
 });
