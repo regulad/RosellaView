@@ -9,7 +9,12 @@ The owner does the submission; nothing here is automated. Listing wording rules 
 - [x] In-app About & privacy screen: AGPL §5(d) notices, third-party notices, trademark notice, privacy disclosure.
 - [x] Source published at https://github.com/regulad/RosellaView (`SOURCE_URL` in `app/src/About.tsx`); the UxPlay fork is at https://github.com/regulad/UxPlay (branch `rosella`). Push before each release, so the shipped commit is public.
 - [x] Privacy policy hosted at https://regulad.github.io/RosellaView/ (GitHub Pages, branch `gh-pages`, `index.md`). It's a copy of `docs/PRIVACY.md`: update both together. Enter the URL in the portal.
-- [ ] Build a production release with `scripts/build.sh production`, with an increased `build-number` in the manifest.
+- [ ] Release build, by tag (`.github/workflows/release.yml`):
+  1. Bump `version` in `app/package.json` and `app/manifest.toml`, and `build-number` in the manifest.
+  2. Commit and push, then `git tag vX.Y.Z && git push origin vX.Y.Z`.
+  3. CI runs the checks and builds with the pinned SDK (`VEGA_SDK_VERSION`, about 12 min). Source maps and debug files go to Sentry (secret `SENTRY_AUTH_TOKEN`, an organization token), and the `.vpkg` files to the GitHub Release for the tag.
+  4. Upload `rosellaview_armv7.vpkg` (and `aarch64`) in the Developer Console. The Appstore's submission API doesn't take Vega packages yet.
+  - A manual run (Actions → Release → Run workflow) is a dry run: it keeps the packages as an artifact, with no release and no Sentry upload.
 - [ ] Lawyer review: playfair (GPLv3) and DECISIONS.md D10 (APMF glue as a System Library).
 
 ## Privacy questionnaire (suggested answers)
