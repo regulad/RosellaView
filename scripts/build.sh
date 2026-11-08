@@ -85,24 +85,36 @@ export const BUILD = {
 };
 EOF
 
+# Production builds are what's submitted: armv7 only (the Fire TV Stick; the
+# other targets are for the Vega Virtual Device) and unsigned, since Amazon
+# re-signs submitted packages. Development builds keep every target and the
+# developer signature that sideloading needs.
+if [ "$ENVIRONMENT" = production ]; then
+  NATIVE_BUILD="npm run build:js && vega build -b Release -t armv7"
+  APP_TARGET="--target armv7 --additional-native-options \"--no-profile\""
+else
+  NATIVE_BUILD="npm run build"
+  APP_TARGET=""
+fi
+
 echo "== $RELEASE ($ENVIRONMENT)"
 in_vega "set -euo pipefail
   cd '$ROOT/native'
   [ -d node_modules ] || npm install --no-audit --no-fund > /dev/null 2>&1
-  npm run build > /tmp/rv-native-build.log 2>&1 || { grep -E 'error|FAILED' /tmp/rv-native-build.log | head -20; exit 1; }
+  ($NATIVE_BUILD) > /tmp/rv-native-build.log 2>&1 || { grep -E 'error|FAILED' /tmp/rv-native-build.log | head -20; exit 1; }
   rm -f ./*.tgz
   npm pack --ignore-scripts > /dev/null 2>&1
   # The native UI component (GL surface view): its own package.
   cd '$ROOT/native-view'
   [ -d node_modules ] || npm install --no-audit --no-fund > /dev/null 2>&1
-  npm run build > /tmp/rv-view-build.log 2>&1 || { grep -E 'error|FAILED' /tmp/rv-view-build.log | head -20; exit 1; }
+  ($NATIVE_BUILD) > /tmp/rv-view-build.log 2>&1 || { grep -E 'error|FAILED' /tmp/rv-view-build.log | head -20; exit 1; }
   rm -f ./*.tgz
   npm pack --ignore-scripts > /dev/null 2>&1
   cd '$APP'
   npm uninstall rosellaview-native rosellaview-surface > /dev/null 2>&1
   npm install --no-audit --no-fund file:../native/rosellaview-native-0.1.0.tgz file:../native-view/rosellaview-surface-0.1.0.tgz > /dev/null
   # -output-source-map: Hermes writes index.hermes.bundle.map next to the bytecode.
-  npx react-native build-vega --build-type Release --hermes-flags '-O,-w,-output-source-map' > /tmp/rv-app-build.log 2>&1 \
+  npx react-native build-vega --build-type Release $APP_TARGET --hermes-flags '-O,-w,-output-source-map' > /tmp/rv-app-build.log 2>&1 \
     || { grep -iE 'error|FAILED' /tmp/rv-app-build.log | head -20; exit 1; }
 "
 

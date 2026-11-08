@@ -74,9 +74,8 @@ jobs:
       - name: Collect packages
         run: |
           mkdir -p out
-          for arch in armv7 aarch64 x86_64; do
-            cp "app/build/${arch}-release/rosellaview_${arch}.vpkg" out/
-          done
+          # Production builds are armv7 only, unsigned (scripts/build.sh).
+          cp app/build/armv7-release/rosellaview_armv7.vpkg out/
           ls -la out
 
       - uses: actions/upload-artifact@v4
@@ -89,8 +88,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Only armv7 ships: it's the Fire TV Stick build, and the one Amazon's
-          # docs say to submit. x86_64 and aarch64 are for the Vega Virtual
-          # Device (Intel and Apple-silicon hosts); they stay in the artifact.
+          # armv7 is the Fire TV Stick build, and the one Amazon's docs say to
+          # submit; x86_64 and aarch64 are only for the Vega Virtual Device.
           gh release create "${GITHUB_REF_NAME}" out/rosellaview_armv7.vpkg --title "RosellaView ${GITHUB_REF_NAME}" \
             --notes "Production build of ${GITHUB_SHA}. Submit rosellaview_armv7.vpkg in the Amazon Developer Console."
