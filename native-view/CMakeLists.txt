@@ -14,6 +14,7 @@ find_package(Kepler REQUIRED)
 
 kepler_add_idl_import_library(rosella_surface_idl
   PACKAGES
+  com.amazon.kepler.audio
   com.amazon.kepler.buffer
   com.amazon.kepler.buffer_queue
   com.amazon.kepler.graphics
@@ -28,6 +29,7 @@ kepler_add_idl_import_library(rosella_surface_idl
 # → xyz.regulad.rosellaview.surface.so (react-native.config.js uiComponentName).
 kepler_add_library(RosellaSurface SHARED
   src/RosellaSurface.cpp
+  src/AudioOut.cpp
   src/Decoder.cpp
 )
 set_target_properties(RosellaSurface PROPERTIES

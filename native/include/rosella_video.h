@@ -74,6 +74,19 @@ typedef int (*rosella_video_latency_ms_fn)(void);
 void rosella_video_report(const rosella_video_stats *stats);
 typedef void (*rosella_video_report_fn)(const rosella_video_stats *);
 
+/* Native audio output: mixed PCM (interleaved s16) with the sender time of its
+ * first frame. While attached, mirrored audio goes here instead of to MSE.
+ * Called on libairplay's audio thread; must return quickly. */
+typedef struct {
+    void *ctx;
+    void (*pcm)(void *ctx, const int16_t *pcm, size_t frames, unsigned rate, unsigned channels, uint64_t sender_ns);
+} rosella_audio_consumer;
+
+/* Attaches (or with NULL detaches) the audio consumer; returns ROSELLA_VIDEO_ABI.
+ * Detaching waits for a call in progress to finish. */
+int rosella_audio_attach(const rosella_audio_consumer *consumer);
+typedef int (*rosella_audio_attach_fn)(const rosella_audio_consumer *);
+
 /* A status line (decoder starts, restarts, errors), sent to JS as a
  * "native_status" receiver event, and so to Sentry. */
 void rosella_video_status(const char *message);

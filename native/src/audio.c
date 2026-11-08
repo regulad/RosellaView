@@ -65,12 +65,20 @@ struct audio_pipeline {
     int have_rtp;
     uint32_t next_rtp; /* RTP timestamp expected for the next packet */
     uint64_t concealed;
-    uint64_t in_ts_ns;    /* sender time of the first sample of the current input, 0 if unknown */
-    size_t in_pos;        /* samples of the current input queued so far */
-    uint64_t block_ts_ns; /* sender time of the current FLAC block's first sample */
-    size_t drop_frames;   /* upcoming samples to drop (audio_shift: play sooner) */
-    size_t insert_frames; /* silence to insert before the next packet (play later) */
+    uint64_t in_ts_ns;       /* sender time of the first sample of the current input, 0 if unknown */
+    size_t in_pos;           /* samples of the current input queued so far */
+    uint64_t block_ts_ns;    /* sender time of the current FLAC block's first sample */
+    size_t drop_frames;      /* upcoming samples to drop (audio_shift: play sooner) */
+    size_t insert_frames;    /* silence to insert before the next packet (play later) */
+    audio_pcm_sink pcm_sink; /* native output, or NULL for MSE */
+    void *pcm_sink_ctx;
 };
+
+void audio_set_pcm_sink(audio_pipeline *p, audio_pcm_sink sink, void *ctx) {
+    p->pcm_sink = sink;
+    p->pcm_sink_ctx = ctx;
+    p->pcm_frames = 0; /* a partial FLAC block can't be finished now */
+}
 
 static void close_decoder(audio_pipeline *p) { avcodec_free_context(&p->dec); }
 
@@ -225,6 +233,17 @@ static void queue_pcm(audio_pipeline *p, const int16_t *pcm, size_t frames) {
         p->in_pos += skip; /* the sender time moves on past them */
         pcm += skip * CHANNELS;
         frames -= skip;
+    }
+    while (frames > 0 && p->pcm_sink) {
+        /* Native output: mix and hand over, a buffer's worth at a time. */
+        size_t take = frames < FLAC_BLOCK ? frames : FLAC_BLOCK;
+        uint64_t ts = p->in_ts_ns ? p->in_ts_ns + p->in_pos * 1000000000ull / RATE : 0;
+        memcpy(p->pcm, pcm, take * CHANNELS * sizeof *pcm);
+        mix_preview(p, p->pcm, take);
+        p->pcm_sink(p->pcm_sink_ctx, p->pcm, take, ts);
+        p->in_pos += take;
+        pcm += take * CHANNELS;
+        frames -= take;
     }
     while (frames > 0) {
         size_t take = FLAC_BLOCK - p->pcm_frames;

@@ -95,6 +95,7 @@
 #include <apmf/iface/com/amazon/kepler/uitoolkit/view/IView.h>
 #include <apmf/iface/com/amazon/kepler/uitoolkit/view/IViewModule.h>
 
+#include "AudioOut.h"
 #include "Decoder.h"
 #include "gles2.h"
 #include "rosella_video.h"
@@ -151,6 +152,7 @@ struct Bridge {
   rosella_video_latency_ms_fn latencyMs = nullptr;
   rosella_video_report_fn report = nullptr;
   rosella_video_status_fn status = nullptr;
+  rosella_audio_attach_fn audioAttach = nullptr;  // optional (older receivers lack it)
 
   bool load() {
     void* lib = dlopen(ROSELLA_VIDEO_LIBRARY, RTLD_NOW | RTLD_NOLOAD);
@@ -163,6 +165,7 @@ struct Bridge {
     latencyMs = reinterpret_cast<rosella_video_latency_ms_fn>(sym("rosella_video_latency_ms"));
     report = reinterpret_cast<rosella_video_report_fn>(sym("rosella_video_report"));
     status = reinterpret_cast<rosella_video_status_fn>(sym("rosella_video_status"));
+    audioAttach = reinterpret_cast<rosella_audio_attach_fn>(sym("rosella_audio_attach"));
     return attach && requestKeyframe && latencyMs && report && status;
   }
 };
@@ -592,6 +595,17 @@ static void renderThread(std::shared_ptr<SurfaceState> state, Ptr<kg::IMediaSurf
 
     rosella_video_consumer consumer{state.get(), onFrame, onReset};
     bridge.attach(&consumer);
+
+    // Spike (branch spike/native-audio): audio to the OS's PCM output too.
+    AudioOut audio([state](std::string const& m) { state->status(m); });
+    rosella_audio_consumer audioConsumer{
+        &audio, [](void* ctx, int16_t const* pcm, size_t frames, unsigned, unsigned, uint64_t senderNs) {
+          static_cast<AudioOut*>(ctx)->push(pcm, frames, senderNs);
+        }};
+    if (bridge.audioAttach) {
+      audio.start();
+      bridge.audioAttach(&audioConsumer);
+    }
     state->status("native video ready");
 
     std::deque<AccessUnit> feeding;       // due, waiting for a decoder input buffer
@@ -846,6 +860,8 @@ static void renderThread(std::shared_ptr<SurfaceState> state, Ptr<kg::IMediaSurf
       }
     }
 
+    if (bridge.audioAttach) bridge.audioAttach(nullptr);  // waits out a call in progress
+    audio.stop();
     bridge.attach(nullptr);  // waits out a frame call in progress
     dropReady(0);
     decoder.close();

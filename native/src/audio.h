@@ -44,6 +44,12 @@ void audio_set_preview_enabled(audio_pipeline *p, int enabled);
  * much of the upcoming audio (it plays sooner), ms < 0 inserts silence (it
  * plays later). Seeking the platform's live audio player doesn't work. Not
  * for AAC-LC passthrough (ct 4). */
+/* Native audio output (rosella_video.h): while set, mixed PCM (interleaved
+ * s16, 44.1 kHz stereo) goes to `sink` with the sender time of its first
+ * frame, instead of being encoded for the MSE player. NULL restores MSE. */
+typedef void (*audio_pcm_sink)(void *ctx, const int16_t *pcm, size_t frames, uint64_t sender_ns);
+void audio_set_pcm_sink(audio_pipeline *p, audio_pcm_sink sink, void *ctx);
+
 void audio_shift(audio_pipeline *p, int ms);
 
 /* Drops buffered samples (on flush, teardown or a new connection). */

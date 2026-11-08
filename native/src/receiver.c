@@ -362,6 +362,25 @@ ROSELLA_EXPORT int rosella_video_attach(const rosella_video_consumer *consumer) 
     return ROSELLA_VIDEO_ABI;
 }
 
+/* Native audio: under g_audio_lock, like g_audio. */
+static rosella_audio_consumer g_audio_consumer;
+static int g_audio_consumer_on;
+
+static void native_pcm(void *ctx, const int16_t *pcm, size_t frames, uint64_t sender_ns) {
+    (void)ctx; /* called under g_audio_lock, from audio_push */
+    if (g_audio_consumer_on) g_audio_consumer.pcm(g_audio_consumer.ctx, pcm, frames, 44100, 2, sender_ns);
+}
+
+ROSELLA_EXPORT int rosella_audio_attach(const rosella_audio_consumer *consumer) {
+    pthread_mutex_lock(&g_audio_lock);
+    g_audio_consumer_on = consumer != NULL;
+    if (consumer) g_audio_consumer = *consumer;
+    if (g_audio) audio_set_pcm_sink(g_audio, consumer ? native_pcm : NULL, NULL);
+    pthread_mutex_unlock(&g_audio_lock);
+    emit("{\"type\":\"native_audio\",\"attached\":%s}", consumer ? "true" : "false");
+    return ROSELLA_VIDEO_ABI;
+}
+
 ROSELLA_EXPORT int rosella_video_request_keyframe(void) { return receiver_request_keyframe(); }
 
 ROSELLA_EXPORT int rosella_video_latency_ms(void) { return atomic_load(&g_native_latency_ms); }
@@ -789,6 +808,7 @@ int receiver_start(const char *base_name) {
     pthread_mutex_lock(&g_audio_lock);
     if (!g_audio) {
         g_audio = audio_create(audio_output, NULL);
+        if (g_audio_consumer_on) audio_set_pcm_sink(g_audio, native_pcm, NULL);
         load_preview_clip_locked();
     }
     pthread_mutex_unlock(&g_audio_lock);
