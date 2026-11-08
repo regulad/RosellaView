@@ -1,4 +1,4 @@
-# Screenshots (to do)
+# Screenshots
 
 3 to 10 PNGs, 1920 × 1080, named `01-<what>.png`, `02-<what>.png`… in listing order (`docs/ASSETS.md`).
 
