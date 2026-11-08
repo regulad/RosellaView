@@ -42,7 +42,7 @@ static fmp4_muxer *g_mux;
 static receiver_video_sink g_audio_sink;
 static pthread_mutex_t g_audio_lock = PTHREAD_MUTEX_INITIALIZER;
 static audio_pipeline *g_audio;
-static int g_watermark = 1;   /* until the unlock is purchased (JS decides) */
+static int g_watermark = 1; /* until the unlock is purchased (JS decides) */
 
 /* Spoken watermark, shipped as an app asset (scripts/make-preview-clip.sh). */
 #define PREVIEW_CLIP "/pkg/assets/raw/preview.pcm"
@@ -219,9 +219,12 @@ static void redact_addresses(char *s) {
         while (*w == ' ') w++;
         e = w;
         while (*e && *e != ' ') {
-            if (*e == ':') colons++;
-            else if (*e == '.') dots++;
-            else if (*e >= '0' && *e <= '9') digits++;
+            if (*e == ':')
+                colons++;
+            else if (*e == '.')
+                dots++;
+            else if (*e >= '0' && *e <= '9')
+                digits++;
             if (*e == '%' || (*e >= 'a' && *e <= 'f') || (*e >= 'A' && *e <= 'F') || (*e == ':' && e[1] == ':')) v6 = 1;
             e++;
         }
@@ -464,8 +467,8 @@ char *receiver_native_video_json(void) {
                  "{\"attached\":%s,\"sender_ms\":%.3f,\"latency_ms\":%d,\"decoded\":%" PRIu64 ",\"shown\":%" PRIu64
                  ",\"skipped\":%" PRIu64 ",\"late\":%" PRIu64 ",\"errors\":%" PRIu64 ",\"starts\":%" PRIu64
                  ",\"width\":%u,\"height\":%u,\"queued\":%d,\"upload_ms\":%.2f}",
-                 on ? "true" : "false", sender_ms, atomic_load(&g_native_latency_ms), st.decoded, st.shown,
-                 st.skipped, st.late, st.errors, st.starts, st.width, st.height, st.queued, st.upload_ms) < 0)
+                 on ? "true" : "false", sender_ms, atomic_load(&g_native_latency_ms), st.decoded, st.shown, st.skipped,
+                 st.late, st.errors, st.starts, st.width, st.height, st.queued, st.upload_ms) < 0)
         json = NULL;
     return json;
 }
@@ -512,8 +515,14 @@ static void cb_audio_process(void *cls, raop_ntp_t *ntp, audio_decode_struct *da
     pthread_mutex_unlock(&g_audio_lock);
 }
 
-static void cb_video_pause(void *cls) { (void)cls; emit("{\"type\":\"video_pause\"}"); }
-static void cb_video_resume(void *cls) { (void)cls; emit("{\"type\":\"video_resume\"}"); }
+static void cb_video_pause(void *cls) {
+    (void)cls;
+    emit("{\"type\":\"video_pause\"}");
+}
+static void cb_video_resume(void *cls) {
+    (void)cls;
+    emit("{\"type\":\"video_resume\"}");
+}
 static void cb_video_flush(void *cls) {
     (void)cls;
     mux_reset();
@@ -533,14 +542,16 @@ static void cb_video_reset(void *cls, reset_type_t reset_type) {
 }
 
 static int cb_video_set_codec_and_size(void *cls, video_codec_t codec, unsigned short width_source,
-                                       unsigned short height_source, unsigned short x_offset,
-                                       unsigned short y_offset, unsigned short width, unsigned short height) {
+                                       unsigned short height_source, unsigned short x_offset, unsigned short y_offset,
+                                       unsigned short width, unsigned short height) {
     (void)cls;
     pthread_mutex_lock(&g_mux_lock);
     if (g_mux) fmp4_set_size(g_mux, width_source, height_source);
     pthread_mutex_unlock(&g_mux_lock);
     emit("{\"type\":\"video_format\",\"codec\":\"%s\",\"source\":[%u,%u],\"offset\":[%u,%u],\"size\":[%u,%u]}",
-         codec == VIDEO_CODEC_H264 ? "h264" : codec == VIDEO_CODEC_H265 ? "h265" : "unknown",
+         codec == VIDEO_CODEC_H264   ? "h264"
+         : codec == VIDEO_CODEC_H265 ? "h265"
+                                     : "unknown",
          width_source, height_source, x_offset, y_offset, width, height);
     return 0;
 }
@@ -588,8 +599,8 @@ static void cb_audio_set_progress(void *cls, uint32_t *start, uint32_t *curr, ui
     (void)end;
 }
 
-static void cb_audio_get_format(void *cls, unsigned char *ct, unsigned short *spf, bool *usingScreen,
-                                bool *isMedia, uint64_t *audioFormat) {
+static void cb_audio_get_format(void *cls, unsigned char *ct, unsigned short *spf, bool *usingScreen, bool *isMedia,
+                                uint64_t *audioFormat) {
     int rc = -1;
     (void)cls;
     atomic_store(&g_audio_ct, *ct);
@@ -601,7 +612,8 @@ static void cb_audio_get_format(void *cls, unsigned char *ct, unsigned short *sp
     }
     pthread_mutex_unlock(&g_audio_lock);
     if (rc != 0) emit("{\"type\":\"error\",\"where\":\"audio_set_format\",\"ct\":%u}", *ct);
-    emit("{\"type\":\"audio_format\",\"ct\":%u,\"spf\":%u,\"using_screen\":%s,\"is_media\":%s,\"format\":\"0x%" PRIx64 "\"}",
+    emit("{\"type\":\"audio_format\",\"ct\":%u,\"spf\":%u,\"using_screen\":%s,\"is_media\":%s,\"format\":\"0x%" PRIx64
+         "\"}",
          *ct, *spf, *usingScreen ? "true" : "false", *isMedia ? "true" : "false", *audioFormat);
 }
 
@@ -644,8 +656,14 @@ static void cb_on_video_play(void *cls, const char *location, const float start_
     (void)start_position;
     emit_str("hls_play", "location", location);
 }
-static void cb_on_video_scrub(void *cls, const float position) { (void)cls; (void)position; }
-static void cb_on_video_rate(void *cls, const float rate) { (void)cls; (void)rate; }
+static void cb_on_video_scrub(void *cls, const float position) {
+    (void)cls;
+    (void)position;
+}
+static void cb_on_video_rate(void *cls, const float rate) {
+    (void)cls;
+    (void)rate;
+}
 static void cb_on_video_stop(void *cls) { (void)cls; }
 static void cb_on_video_acquire_playback_info(void *cls, playback_info_t *playback_video) {
     (void)cls;
@@ -725,10 +743,14 @@ static void report_memlock(void) {
         emit("{\"type\":\"memlock\",\"error\":%d}", errno);
         return;
     }
-    if (rl.rlim_cur == RLIM_INFINITY) snprintf(cur, sizeof cur, "\"unlimited\"");
-    else snprintf(cur, sizeof cur, "%llu", (unsigned long long)rl.rlim_cur);
-    if (rl.rlim_max == RLIM_INFINITY) snprintf(max, sizeof max, "\"unlimited\"");
-    else snprintf(max, sizeof max, "%llu", (unsigned long long)rl.rlim_max);
+    if (rl.rlim_cur == RLIM_INFINITY)
+        snprintf(cur, sizeof cur, "\"unlimited\"");
+    else
+        snprintf(cur, sizeof cur, "%llu", (unsigned long long)rl.rlim_cur);
+    if (rl.rlim_max == RLIM_INFINITY)
+        snprintf(max, sizeof max, "\"unlimited\"");
+    else
+        snprintf(max, sizeof max, "%llu", (unsigned long long)rl.rlim_max);
     if (posix_memalign(&probe, (size_t)page, (size_t)page) == 0) {
         rc = mlock(probe, (size_t)page);
         err = rc ? errno : 0;
@@ -864,8 +886,9 @@ int receiver_start(const char *base_name) {
     {
         char *n = json_escape(name);
         /* The TV's ID derives from its MAC address: kept off Sentry. */
-        emit_private("{\"type\":\"started\",\"name\":\"%s\",\"port\":%u,\"deviceid\":\"%s\",\"features\":\"0x%" PRIx64 "\"}",
-             n, port, device_id, dnssd_get_airplay_features(g_dnssd));
+        emit_private("{\"type\":\"started\",\"name\":\"%s\",\"port\":%u,\"deviceid\":\"%s\",\"features\":\"0x%" PRIx64
+                     "\"}",
+                     n, port, device_id, dnssd_get_airplay_features(g_dnssd));
         report_memlock();
         free(n);
     }
@@ -918,11 +941,13 @@ int receiver_is_running(void) { return g_raop != NULL; }
 int receiver_reset_identity(void) {
     /* A new hardware ID means a new name tag, and senders see a new receiver:
      * its old pairings (the pairing key) go too. */
+    char base[sizeof g_base_name]; /* receiver_start writes g_base_name */
+    snprintf(base, sizeof base, "%s", g_base_name);
     receiver_stop();
     unlink(IDENTITY_FILE);
     unlink(PAIRING_KEY_FILE);
     emit("{\"type\":\"identity_reset\"}");
-    return receiver_start(g_base_name);
+    return receiver_start(base);
 }
 
 void receiver_video_restart(void) {
@@ -1007,8 +1032,9 @@ static void system_stats(char *out, size_t len) {
     }
     put_num(&p, &left, "mem_available_kb", (double)proc_kb("/proc/meminfo", "MemAvailable"));
     if (getrusage(RUSAGE_SELF, &ru) == 0) {
-        put_num(&p, &left, "proc_cpu_ms", ru.ru_utime.tv_sec * 1e3 + ru.ru_utime.tv_usec / 1e3 + ru.ru_stime.tv_sec * 1e3 +
-                                              ru.ru_stime.tv_usec / 1e3);
+        put_num(&p, &left, "proc_cpu_ms",
+                ru.ru_utime.tv_sec * 1e3 + ru.ru_utime.tv_usec / 1e3 + ru.ru_stime.tv_sec * 1e3 +
+                    ru.ru_stime.tv_usec / 1e3);
     }
     put_num(&p, &left, "ncpu", (double)sysconf(_SC_NPROCESSORS_ONLN));
     proc_line("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq", line, sizeof line);
@@ -1064,12 +1090,13 @@ char *receiver_stats_json(void) {
     }
     if (asprintf(&json,
                  "{\"running\":%s,\"connections\":%d,\"video_frames\":%" PRIuFAST64 ",\"video_bytes\":%" PRIuFAST64
-                 ",\"audio_packets\":%" PRIuFAST64 ",\"audio_bytes\":%" PRIuFAST64 ",\"audio_ct\":%d,\"audio_concealed_ms\":%" PRIu64 ",\"keyframes\":%" PRIu64
+                 ",\"audio_packets\":%" PRIuFAST64 ",\"audio_bytes\":%" PRIuFAST64
+                 ",\"audio_ct\":%d,\"audio_concealed_ms\":%" PRIu64 ",\"keyframes\":%" PRIu64
                  ",\"rss_kb\":%ld,\"rss_peak_kb\":%ld%s}",
                  g_raop ? "true" : "false", atomic_load(&g_connections), atomic_load(&g_video_frames),
                  atomic_load(&g_video_bytes), atomic_load(&g_audio_packets), atomic_load(&g_audio_bytes),
-                 atomic_load(&g_audio_ct), concealed * 1000 / 44100, keyframes,
-                 proc_kb("/proc/self/status", "VmRSS"), proc_kb("/proc/self/status", "VmHWM"), sys) < 0)
+                 atomic_load(&g_audio_ct), concealed * 1000 / 44100, keyframes, proc_kb("/proc/self/status", "VmRSS"),
+                 proc_kb("/proc/self/status", "VmHWM"), sys) < 0)
         json = NULL;
     return json;
 }

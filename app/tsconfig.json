@@ -1,6 +1,6 @@
 {
-    "extends": "@react-native/typescript-config",
-    "compilerOptions": {
-        "types": ["@amazon-devices/react-native-kepler"], // Override "react-native" from @react-native/typescript-config
-    },
+  "extends": "@react-native/typescript-config",
+  "compilerOptions": {
+    "types": ["@amazon-devices/react-native-kepler"] // Override "react-native" from @react-native/typescript-config
+  }
 }

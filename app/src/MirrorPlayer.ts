@@ -333,7 +333,9 @@ export class MirrorPlayer {
       Receiver.shiftAudio(aheadMs - AUDIO_TARGET_AHEAD_MS);
       // Give the shortened audio time to reach the playhead.
       this.lateChecks = -AUDIO_LATE_CHECKS;
-      this.log(`${this.stream.kind} latency ${aheadMs.toFixed(0)}ms: dropping ${(aheadMs - AUDIO_TARGET_AHEAD_MS).toFixed(0)}ms (#${this.latencyFixes})`);
+      this.log(
+        `${this.stream.kind} latency ${aheadMs.toFixed(0)}ms: dropping ${(aheadMs - AUDIO_TARGET_AHEAD_MS).toFixed(0)}ms (#${this.latencyFixes})`,
+      );
       countEvent(`${this.stream.kind}.latency_corrections`);
     }
   }

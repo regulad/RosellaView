@@ -46,7 +46,6 @@ export function senderKind(model: string): string {
   return 'other';
 }
 
-
 // Personal data in receiver events, used on the TV only: device names, the
 // sender's AirPlay ID, the TV's own (MAC-derived) ID. Only the sender's model
 // and OS version go to Sentry (owner's call; PRIVACY.md).
@@ -250,7 +249,9 @@ export function receiverStats(
       const p = prevFrames;
       if (p && now > p.t && video.totalFrames >= p.total) {
         const dt = (now - p.t) / 1000;
-        metrics.gauge('video.fps_shown', (video.totalFrames - p.total - (video.droppedFrames - p.dropped)) / dt, {attributes});
+        metrics.gauge('video.fps_shown', (video.totalFrames - p.total - (video.droppedFrames - p.dropped)) / dt, {
+          attributes,
+        });
         metrics.count('video.dropped', Math.max(0, video.droppedFrames - p.dropped), {attributes});
       }
       prevFrames = {t: now, total: video.totalFrames, dropped: video.droppedFrames};

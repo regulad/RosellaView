@@ -57,7 +57,6 @@ void receiver_video_restart(void);
  * codec packet that ends mirroring. */
 int receiver_request_keyframe(void);
 
-
 /* Native video (rosella_video.h): the capture-to-screen latency the
  * consumer aims for, in ms; and its state as a JSON string (caller frees). */
 void receiver_set_video_latency(int ms);

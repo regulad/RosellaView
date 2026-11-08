@@ -1,0 +1,11 @@
+# Only our TypeScript/JavaScript and JSON; prose (Markdown) is hand-wrapped.
+*.md
+third_party/
+**/node_modules/
+**/build/
+**/dist/
+**/*.tgz
+**/package-lock.json
+app/src/buildInfo.ts
+app/buildinfo.json
+**/CMakeUserPresets.json

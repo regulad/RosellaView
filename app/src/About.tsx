@@ -5,9 +5,9 @@
  * native pipeline, DECISIONS.md D12) and resetting the receiver's identity.
  *
  * One column, scrolled with up/down on the remote: text isn't focusable, so
- * the focus engine wouldn't scroll it. The settings at the end sit in one
- * row (left/right moves between them) and answer select only once they're
- * scrolled into view.
+ * the focus engine wouldn't scroll it. The settings at the end answer select
+ * only once they're scrolled into view; the reset button can't take focus
+ * before then, and up from it moves focus to the checkbox, not the page.
  *
  * Copyright (C) 2026 Parker Wahle
  * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -75,9 +75,14 @@ export const About = ({receiverName, onResetIdentity, compatibilityMode, onCompa
     setAtEnd(size.content > 0 && offset.current >= maxOffset - 1);
   }, [size, maxOffset]);
 
+  const resetFocused = useRef(false);
+
   useTVEventHandler((e: HWEvent) => {
     if (e.eventKeyAction === KEY_UP || (e.eventType !== 'up' && e.eventType !== 'down')) {
       return;
+    }
+    if (e.eventType === 'up' && resetFocused.current) {
+      return; // focus moves up to the checkbox
     }
     const max = latest.current.maxOffset;
     const y = Math.min(max, Math.max(0, offset.current + (e.eventType === 'down' ? SCROLL_STEP : -SCROLL_STEP)));
@@ -141,56 +146,57 @@ export const About = ({receiverName, onResetIdentity, compatibilityMode, onCompa
         </Text>
 
         <Text style={styles.heading}>Settings</Text>
-        <View style={styles.settingsRow}>
-          <Pressable
-            hasTVPreferredFocus
-            onPress={() => {
-              if (atEnd) {
-                onCompatibilityMode(!compatibilityMode);
-              }
-            }}
-            style={styles.checkRow}>
-            {({focused}) => {
-              const lit = focused && atEnd;
-              return (
-                <>
-                  <Text style={[styles.checkLabel, lit && styles.lit]}>Compatibility Mode</Text>
-                  <View style={[styles.box, lit && styles.boxLit]}>
-                    {compatibilityMode ? <Text style={[styles.check, lit && styles.lit]}>✓</Text> : null}
-                  </View>
-                </>
-              );
-            }}
-          </Pressable>
-          <Pressable
-            onPress={() => {
-              if (!atEnd) {
-                return;
-              }
-              if (confirming) {
-                setConfirming(false);
-                onResetIdentity();
-              } else {
-                setConfirming(true);
-              }
-            }}
-            style={styles.checkRow}>
-            {({focused}) => {
-              const lit = focused && atEnd;
-              return (
-                <View style={[styles.button, lit && styles.buttonLit]}>
-                  <Text style={[styles.buttonText, lit && styles.buttonTextLit]}>
-                    {confirming ? 'Press again to reset' : 'Reset Receiver Name'}
-                  </Text>
+        <Pressable
+          hasTVPreferredFocus
+          onPress={() => {
+            if (atEnd) {
+              onCompatibilityMode(!compatibilityMode);
+            }
+          }}
+          style={styles.checkRow}>
+          {({focused}) => {
+            const lit = focused && atEnd;
+            return (
+              <>
+                <Text style={[styles.checkLabel, lit && styles.lit]}>Compatibility Mode</Text>
+                <View style={[styles.box, lit && styles.boxLit]}>
+                  {compatibilityMode ? <Text style={[styles.check, lit && styles.lit]}>✓</Text> : null}
                 </View>
-              );
-            }}
-          </Pressable>
-        </View>
+              </>
+            );
+          }}
+        </Pressable>
         <Text style={styles.small}>
           Compatibility Mode plays mirrored video through the TV's standard video player. Try it if the picture doesn't
           appear. The brightest highlights and the darkest shadows will lose fidelity when this option is on.
         </Text>
+        <Pressable
+          onPress={() => {
+            if (!atEnd) {
+              return;
+            }
+            if (confirming) {
+              setConfirming(false);
+              onResetIdentity();
+            } else {
+              setConfirming(true);
+            }
+          }}
+          focusable={atEnd}
+          onFocus={() => (resetFocused.current = true)}
+          onBlur={() => (resetFocused.current = false)}
+          style={styles.resetRow}>
+          {({focused}) => {
+            const lit = focused && atEnd;
+            return (
+              <View style={[styles.button, lit && styles.buttonLit]}>
+                <Text style={[styles.buttonText, lit && styles.buttonTextLit]}>
+                  {confirming ? 'Press again to reset' : 'Reset Receiver Name'}
+                </Text>
+              </View>
+            );
+          }}
+        </Pressable>
         <Text style={styles.small}>
           Resetting gives this TV a new name (now "{receiverName}") and forgets the devices paired with it; select it
           again on them afterwards.
@@ -216,12 +222,12 @@ const styles = StyleSheet.create({
   small: {color: '#aaa', fontSize: 22, lineHeight: 32, marginBottom: 10},
   notice: {color: '#aaa', fontSize: 22, lineHeight: 32},
   after: {marginTop: 10},
-  settingsRow: {flexDirection: 'row', alignItems: 'center', marginBottom: 8},
+  resetRow: {alignSelf: 'flex-start', paddingVertical: 8, marginTop: 16},
   checkRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: 'flex-start',
     paddingVertical: 8,
-    marginRight: 56,
   },
   button: {
     paddingHorizontal: 24,

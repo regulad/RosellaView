@@ -53,7 +53,10 @@ export const AvDelayOverlay = ({active, delayMs, onChange}: Props) => {
       return;
     }
     if (e.eventType === 'left' || e.eventType === 'right') {
-      const next = Math.min(AV_DELAY_MAX_MS, Math.max(AV_DELAY_MIN_MS, d + (e.eventType === 'right' ? STEP_MS : -STEP_MS)));
+      const next = Math.min(
+        AV_DELAY_MAX_MS,
+        Math.max(AV_DELAY_MIN_MS, d + (e.eventType === 'right' ? STEP_MS : -STEP_MS)),
+      );
       change(next);
       show();
     }

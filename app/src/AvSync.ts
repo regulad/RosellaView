@@ -219,7 +219,9 @@ export class AvSync {
     countEvent('av.corrections');
     log(
       `av sync: audio ${this.offsetMs.toFixed(0)}ms off target: ` +
-        (native ? `video latency ${moved >= 0 ? '+' : ''}${moved}ms (now ${(video as NativeVideo).latencyMs}ms), ` : '') +
+        (native
+          ? `video latency ${moved >= 0 ? '+' : ''}${moved}ms (now ${(video as NativeVideo).latencyMs}ms), `
+          : '') +
         `audio shift ${shift}ms (#${this.corrections})`,
     );
   }

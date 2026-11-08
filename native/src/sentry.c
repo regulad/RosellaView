@@ -100,8 +100,10 @@ static sentry_value_t on_crash(const sentry_ucontext_t *uctx, sentry_value_t eve
     exc = sentry_value_get_by_index(sentry_value_get_by_key(sentry_value_get_by_key(event, "exception"), "values"), 0);
     if (!sentry_value_is_null(exc)) {
         sentry_value_t st = sentry_value_get_by_key(exc, "stacktrace");
-        if (!sentry_value_is_null(st)) sentry_value_set_by_key(st, "frames", frames);
-        else sentry_value_decref(frames);
+        if (!sentry_value_is_null(st))
+            sentry_value_set_by_key(st, "frames", frames);
+        else
+            sentry_value_decref(frames);
     } else {
         sentry_value_decref(frames);
     }

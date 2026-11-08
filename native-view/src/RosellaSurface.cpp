@@ -259,7 +259,9 @@ static std::vector<uint8_t> parameterSets(std::vector<uint8_t> const& au) {
 // ---------------------------------------------------------------------------
 // GL.
 
-#define X(ret, name, params) using name##_t = ret(*) params; static name##_t name;
+#define X(ret, name, params)      \
+  using name##_t = ret(*) params; \
+  static name##_t name;
 ROSELLA_GL_FUNCTIONS(X)
 #undef X
 
@@ -276,11 +278,11 @@ static bool loadGl(View<kg::IGpuDevice> gpu, SurfaceState& state) {
     return lib ? dlsym(lib, name) : nullptr;
   };
   bool ok = true;
-#define X(ret, name, params)                                  \
-  name = reinterpret_cast<name##_t>(lookup(#name));           \
-  if (!name) {                                                \
+#define X(ret, name, params)                                    \
+  name = reinterpret_cast<name##_t>(lookup(#name));             \
+  if (!name) {                                                  \
     state.status(std::string("GL function missing: ") + #name); \
-    ok = false;                                               \
+    ok = false;                                                 \
   }
   ROSELLA_GL_FUNCTIONS(X)
 #undef X
@@ -558,9 +560,8 @@ static void renderThread(std::shared_ptr<SurfaceState> state, Ptr<kg::IMediaSurf
   state->statusSink = bridge.status;
   Renderer r;
   try {
-    auto graphics = apmf::GetProcessObject()
-                        ->getComponent("/com.amazon.kepler.graphics")
-                        .TryQueryInterface<kg::IGraphicsModule>();
+    auto graphics =
+        apmf::GetProcessObject()->getComponent("/com.amazon.kepler.graphics").TryQueryInterface<kg::IGraphicsModule>();
     if (!graphics) {
       state->status("no /com.amazon.kepler.graphics IGraphicsModule");
       return;
@@ -593,10 +594,10 @@ static void renderThread(std::shared_ptr<SurfaceState> state, Ptr<kg::IMediaSurf
     bridge.attach(&consumer);
     state->status("native video ready");
 
-    std::deque<AccessUnit> feeding;   // due, waiting for a decoder input buffer
+    std::deque<AccessUnit> feeding;       // due, waiting for a decoder input buffer
     std::map<uint64_t, Timing> inFlight;  // by pts
     std::deque<Ready> ready;
-    std::vector<uint8_t> paramSets;   // the stream's latest SPS + PPS
+    std::vector<uint8_t> paramSets;  // the stream's latest SPS + PPS
     unsigned streamW = 0, streamH = 0;
     bool fullRange = false;
     unsigned matrix = 2;
@@ -900,8 +901,7 @@ struct SurfaceListener : ApmfBase<SurfaceListener, uv::ISurfaceViewListener> {
   std::shared_ptr<SurfaceState> state_;
 };
 
-struct SurfaceViewManager
-    : ApmfBase<SurfaceViewManager, rx::IViewManager, rx::IContextDelegate, rx::ILayoutDelegate> {
+struct SurfaceViewManager : ApmfBase<SurfaceViewManager, rx::IViewManager, rx::IContextDelegate, rx::ILayoutDelegate> {
   explicit SurfaceViewManager(Ptr<uv::IViewModule> viewModule) : viewModule_(std::move(viewModule)) {}
 
   Ptr<uv::IView> makeView() {

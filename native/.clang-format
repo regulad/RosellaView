@@ -1,0 +1,16 @@
+# RosellaView's C (native/src): 4-space K&R, 120 columns.
+BasedOnStyle: LLVM
+Language: Cpp
+IndentWidth: 4
+ColumnLimit: 120
+PointerAlignment: Right
+AllowShortFunctionsOnASingleLine: All
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortLoopsOnASingleLine: true
+AllowShortBlocksOnASingleLine: Empty
+AlignConsecutiveMacros: false
+AlignTrailingComments: true
+SortIncludes: Never
+ReflowComments: false
+BreakBeforeBraces: Attach
+IndentCaseLabels: false

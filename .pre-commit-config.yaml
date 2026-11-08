@@ -1,0 +1,22 @@
+# Checks each commit with the repository's own tools (package.json, the
+# .clang-format files). Needs `npm install` at the repository root once.
+repos:
+  - repo: local
+    hooks:
+      - id: prettier
+        name: prettier (format check)
+        entry: npx prettier --check --ignore-unknown
+        language: system
+        types_or: [ts, tsx, javascript, json, yaml]
+        exclude: ^third_party/
+      - id: eslint
+        name: eslint
+        entry: npx eslint --max-warnings 0
+        language: system
+        types_or: [ts, tsx, javascript]
+        exclude: ^third_party/
+      - id: clang-format
+        name: clang-format (format check)
+        entry: clang-format --dry-run --Werror
+        language: system
+        files: ^(native/(src|include)|native-view/src)/.*\.(c|h|cpp)$

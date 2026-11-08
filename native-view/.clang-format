@@ -1,0 +1,5 @@
+# RosellaView's C++ (native-view/src): Google style, 120 columns.
+BasedOnStyle: Google
+ColumnLimit: 120
+SortIncludes: Never
+ReflowComments: false

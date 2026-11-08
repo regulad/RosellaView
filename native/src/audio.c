@@ -38,11 +38,11 @@ static const uint8_t AAC_ELD_ASC[4] = {0xf8, 0xe8, 0x50, 0x00};
 #define AAC_LC_FRAME 1024
 
 #define PREVIEW_INTERVAL (5 * RATE) /* samples between spoken watermarks */
-#define PREVIEW_FIRST (2 * RATE)     /* the first comes this far into a stream */
-#define DUCK_FULL 1024               /* programme gain, Q10 */
-#define DUCK_LOW 307                 /* ~30% while the voice speaks */
-#define DUCK_STEP 2                  /* per sample: ~8 ms ramps, so ducking doesn't click */
-#define LIMIT_KNEE 24576             /* soft limiter knee (~-2.5 dBFS) */
+#define PREVIEW_FIRST (2 * RATE)    /* the first comes this far into a stream */
+#define DUCK_FULL 1024              /* programme gain, Q10 */
+#define DUCK_LOW 307                /* ~30% while the voice speaks */
+#define DUCK_STEP 2                 /* per sample: ~8 ms ramps, so ducking doesn't click */
+#define LIMIT_KNEE 24576            /* soft limiter knee (~-2.5 dBFS) */
 
 #define MAX_CONCEAL RATE /* gaps longer than this are a new timeline, not loss */
 
@@ -56,25 +56,23 @@ struct audio_pipeline {
     size_t pcm_frames;
     uint64_t flac_frame;
     uint8_t *flac_buf;
-    int16_t *preview;          /* spoken watermark, mono */
+    int16_t *preview; /* spoken watermark, mono */
     size_t preview_len;
     int preview_enabled;
-    size_t preview_pos;        /* < preview_len while the clip is playing */
-    uint64_t preview_wait;     /* samples until the next clip starts */
-    int duck;                  /* current programme gain, Q10 */
+    size_t preview_pos;    /* < preview_len while the clip is playing */
+    uint64_t preview_wait; /* samples until the next clip starts */
+    int duck;              /* current programme gain, Q10 */
     int have_rtp;
-    uint32_t next_rtp;         /* RTP timestamp expected for the next packet */
+    uint32_t next_rtp; /* RTP timestamp expected for the next packet */
     uint64_t concealed;
-    uint64_t in_ts_ns;  /* sender time of the first sample of the current input, 0 if unknown */
-    size_t in_pos;      /* samples of the current input queued so far */
+    uint64_t in_ts_ns;    /* sender time of the first sample of the current input, 0 if unknown */
+    size_t in_pos;        /* samples of the current input queued so far */
     uint64_t block_ts_ns; /* sender time of the current FLAC block's first sample */
-    size_t drop_frames;    /* upcoming samples to drop (audio_shift: play sooner) */
-    size_t insert_frames;  /* silence to insert before the next packet (play later) */
+    size_t drop_frames;   /* upcoming samples to drop (audio_shift: play sooner) */
+    size_t insert_frames; /* silence to insert before the next packet (play later) */
 };
 
-static void close_decoder(audio_pipeline *p) {
-    avcodec_free_context(&p->dec);
-}
+static void close_decoder(audio_pipeline *p) { avcodec_free_context(&p->dec); }
 
 static int open_decoder(audio_pipeline *p, enum AVCodecID id, const uint8_t *extradata, size_t len) {
     const AVCodec *codec = avcodec_find_decoder(id);
@@ -266,13 +264,26 @@ static void queue_frame(audio_pipeline *p, const AVFrame *f) {
                 int sc = c < ch ? c : ch - 1; /* mono → both channels */
                 int16_t v = 0;
                 switch (f->format) {
-                case AV_SAMPLE_FMT_FLTP: v = clip16(((const float *)f->extended_data[sc])[done + i]); break;
-                case AV_SAMPLE_FMT_FLT: v = clip16(((const float *)f->data[0])[(done + i) * ch + sc]); break;
-                case AV_SAMPLE_FMT_S16P: v = ((const int16_t *)f->extended_data[sc])[done + i]; break;
-                case AV_SAMPLE_FMT_S16: v = ((const int16_t *)f->data[0])[(done + i) * ch + sc]; break;
-                case AV_SAMPLE_FMT_S32P: v = (int16_t)(((const int32_t *)f->extended_data[sc])[done + i] >> 16); break;
-                case AV_SAMPLE_FMT_S32: v = (int16_t)(((const int32_t *)f->data[0])[(done + i) * ch + sc] >> 16); break;
-                default: break;
+                case AV_SAMPLE_FMT_FLTP:
+                    v = clip16(((const float *)f->extended_data[sc])[done + i]);
+                    break;
+                case AV_SAMPLE_FMT_FLT:
+                    v = clip16(((const float *)f->data[0])[(done + i) * ch + sc]);
+                    break;
+                case AV_SAMPLE_FMT_S16P:
+                    v = ((const int16_t *)f->extended_data[sc])[done + i];
+                    break;
+                case AV_SAMPLE_FMT_S16:
+                    v = ((const int16_t *)f->data[0])[(done + i) * ch + sc];
+                    break;
+                case AV_SAMPLE_FMT_S32P:
+                    v = (int16_t)(((const int32_t *)f->extended_data[sc])[done + i] >> 16);
+                    break;
+                case AV_SAMPLE_FMT_S32:
+                    v = (int16_t)(((const int32_t *)f->data[0])[(done + i) * ch + sc] >> 16);
+                    break;
+                default:
+                    break;
                 }
                 tmp[i * CHANNELS + c] = v;
             }

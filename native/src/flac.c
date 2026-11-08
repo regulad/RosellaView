@@ -30,15 +30,24 @@ static uint16_t crc16(const uint8_t *b, size_t n) {
 /* 4-bit sample rate codes (RFC 9639 9.1.3); 0 means "not encodable here". */
 static int rate_code(unsigned rate) {
     switch (rate) {
-    case 8000: return 4;
-    case 16000: return 5;
-    case 22050: return 6;
-    case 24000: return 7;
-    case 32000: return 8;
-    case 44100: return 9;
-    case 48000: return 10;
-    case 96000: return 11;
-    default: return 0;
+    case 8000:
+        return 4;
+    case 16000:
+        return 5;
+    case 22050:
+        return 6;
+    case 24000:
+        return 7;
+    case 32000:
+        return 8;
+    case 44100:
+        return 9;
+    case 48000:
+        return 10;
+    case 96000:
+        return 11;
+    default:
+        return 0;
     }
 }
 
@@ -84,9 +93,9 @@ size_t flac_write_frame(uint8_t *out, uint64_t frame, unsigned sample_rate, unsi
     int rc = rate_code(sample_rate);
     if (!rc || channels < 1 || channels > 8) return 0;
 
-    out[n++] = 0xff;                 /* sync code 0b11111111111110 ... */
-    out[n++] = 0xf8;                 /* ... reserved 0, fixed-blocksize strategy */
-    out[n++] = (uint8_t)(0xb0 | rc); /* block size code 1011 = 2048, sample rate */
+    out[n++] = 0xff;                                        /* sync code 0b11111111111110 ... */
+    out[n++] = 0xf8;                                        /* ... reserved 0, fixed-blocksize strategy */
+    out[n++] = (uint8_t)(0xb0 | rc);                        /* block size code 1011 = 2048, sample rate */
     out[n++] = (uint8_t)(((channels - 1) << 4) | (4 << 1)); /* independent channels, 16 bits/sample */
     n += put_coded_number(out + n, frame);
     out[n] = crc8(out, n);

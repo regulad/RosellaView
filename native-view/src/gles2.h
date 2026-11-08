@@ -52,47 +52,46 @@ typedef unsigned char GLubyte;
 #define GL_SCISSOR_TEST 0x0C11
 
 // X(return type, name, parameter list)
-#define ROSELLA_GL_FUNCTIONS(X)                                                                            \
-  X(const GLubyte*, glGetString, (GLenum name))                                                            \
-  X(GLuint, glCreateShader, (GLenum type))                                                                 \
-  X(void, glShaderSource, (GLuint shader, GLsizei count, const GLchar* const* string, const GLint* length)) \
-  X(void, glCompileShader, (GLuint shader))                                                                \
-  X(void, glGetShaderiv, (GLuint shader, GLenum pname, GLint* params))                                     \
-  X(void, glGetShaderInfoLog, (GLuint shader, GLsizei bufSize, GLsizei* length, GLchar* infoLog))          \
-  X(GLuint, glCreateProgram, (void))                                                                       \
-  X(void, glAttachShader, (GLuint program, GLuint shader))                                                 \
-  X(void, glBindAttribLocation, (GLuint program, GLuint index, const GLchar* name))                        \
-  X(void, glLinkProgram, (GLuint program))                                                                 \
-  X(void, glGetProgramiv, (GLuint program, GLenum pname, GLint* params))                                   \
-  X(void, glGetProgramInfoLog, (GLuint program, GLsizei bufSize, GLsizei* length, GLchar* infoLog))        \
-  X(void, glUseProgram, (GLuint program))                                                                  \
-  X(GLint, glGetUniformLocation, (GLuint program, const GLchar* name))                                     \
-  X(void, glUniform1i, (GLint location, GLint v0))                                                         \
-  X(void, glUniform1f, (GLint location, GLfloat v0))                                                       \
-  X(void, glUniform2f, (GLint location, GLfloat v0, GLfloat v1))                                           \
-  X(void, glUniform4f, (GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3))                   \
-  X(void, glGenTextures, (GLsizei n, GLuint* textures))                                                    \
-  X(void, glBindTexture, (GLenum target, GLuint texture))                                                  \
-  X(void, glTexParameteri, (GLenum target, GLenum pname, GLint param))                                     \
-  X(void, glTexImage2D,                                                                                    \
-    (GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border,       \
-     GLenum format, GLenum type, const void* pixels))                                                      \
-  X(void, glTexSubImage2D,                                                                                 \
-    (GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, \
-     GLenum type, const void* pixels))                                                                     \
-  X(void, glPixelStorei, (GLenum pname, GLint param))                                                      \
-  X(void, glActiveTexture, (GLenum texture))                                                               \
-  X(void, glViewport, (GLint x, GLint y, GLsizei width, GLsizei height))                                   \
-  X(void, glClearColor, (GLfloat r, GLfloat g, GLfloat b, GLfloat a))                                      \
-  X(void, glClear, (GLbitfield mask))                                                                      \
-  X(void, glDisable, (GLenum cap))                                                                         \
-  X(void, glVertexAttribPointer,                                                                           \
-    (GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void* pointer))    \
-  X(void, glEnableVertexAttribArray, (GLuint index))                                                       \
-  X(void, glDrawArrays, (GLenum mode, GLint first, GLsizei count))                                         \
-  X(void, glBindFramebuffer, (GLenum target, GLuint framebuffer))                                          \
-  X(GLenum, glCheckFramebufferStatus, (GLenum target))                                                     \
-  X(void, glGenFramebuffers, (GLsizei n, GLuint* framebuffers))                                            \
-  X(void, glFramebufferTexture2D,                                                                          \
-    (GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level))                    \
+#define ROSELLA_GL_FUNCTIONS(X)                                                                                      \
+  X(const GLubyte*, glGetString, (GLenum name))                                                                      \
+  X(GLuint, glCreateShader, (GLenum type))                                                                           \
+  X(void, glShaderSource, (GLuint shader, GLsizei count, const GLchar* const* string, const GLint* length))          \
+  X(void, glCompileShader, (GLuint shader))                                                                          \
+  X(void, glGetShaderiv, (GLuint shader, GLenum pname, GLint * params))                                              \
+  X(void, glGetShaderInfoLog, (GLuint shader, GLsizei bufSize, GLsizei * length, GLchar * infoLog))                  \
+  X(GLuint, glCreateProgram, (void))                                                                                 \
+  X(void, glAttachShader, (GLuint program, GLuint shader))                                                           \
+  X(void, glBindAttribLocation, (GLuint program, GLuint index, const GLchar* name))                                  \
+  X(void, glLinkProgram, (GLuint program))                                                                           \
+  X(void, glGetProgramiv, (GLuint program, GLenum pname, GLint * params))                                            \
+  X(void, glGetProgramInfoLog, (GLuint program, GLsizei bufSize, GLsizei * length, GLchar * infoLog))                \
+  X(void, glUseProgram, (GLuint program))                                                                            \
+  X(GLint, glGetUniformLocation, (GLuint program, const GLchar* name))                                               \
+  X(void, glUniform1i, (GLint location, GLint v0))                                                                   \
+  X(void, glUniform1f, (GLint location, GLfloat v0))                                                                 \
+  X(void, glUniform2f, (GLint location, GLfloat v0, GLfloat v1))                                                     \
+  X(void, glUniform4f, (GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3))                             \
+  X(void, glGenTextures, (GLsizei n, GLuint * textures))                                                             \
+  X(void, glBindTexture, (GLenum target, GLuint texture))                                                            \
+  X(void, glTexParameteri, (GLenum target, GLenum pname, GLint param))                                               \
+  X(void, glTexImage2D,                                                                                              \
+    (GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format,   \
+     GLenum type, const void* pixels))                                                                               \
+  X(void, glTexSubImage2D,                                                                                           \
+    (GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format,         \
+     GLenum type, const void* pixels))                                                                               \
+  X(void, glPixelStorei, (GLenum pname, GLint param))                                                                \
+  X(void, glActiveTexture, (GLenum texture))                                                                         \
+  X(void, glViewport, (GLint x, GLint y, GLsizei width, GLsizei height))                                             \
+  X(void, glClearColor, (GLfloat r, GLfloat g, GLfloat b, GLfloat a))                                                \
+  X(void, glClear, (GLbitfield mask))                                                                                \
+  X(void, glDisable, (GLenum cap))                                                                                   \
+  X(void, glVertexAttribPointer,                                                                                     \
+    (GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void* pointer))              \
+  X(void, glEnableVertexAttribArray, (GLuint index))                                                                 \
+  X(void, glDrawArrays, (GLenum mode, GLint first, GLsizei count))                                                   \
+  X(void, glBindFramebuffer, (GLenum target, GLuint framebuffer))                                                    \
+  X(GLenum, glCheckFramebufferStatus, (GLenum target))                                                               \
+  X(void, glGenFramebuffers, (GLsizei n, GLuint * framebuffers))                                                     \
+  X(void, glFramebufferTexture2D, (GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level)) \
   X(void, glFinish, (void))

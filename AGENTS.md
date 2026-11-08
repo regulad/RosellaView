@@ -15,6 +15,15 @@ A RosellaSoftware app, published by Parker Wahle <regulad@regulad.xyz>: a screen
 - **Licence: AGPL-3.0-or-later** (`LICENSE.md`, the FSF Markdown text). Don't add dependencies whose licence is incompatible with the GPL, e.g. libfdk-aac or a GPL/non-free FFmpeg configuration.
 - **Never mention "Vega" in Appstore listing text, and never put "AirPlay" or Apple's glyph in the app's name or icon.** Description wording is in `docs/PLAN.md` §1.3.
 
+## Formatting and linting
+
+- **Tools:** run `npm install` once at the repository root (its `package.json` is tooling only). `npm run check` runs everything; `npm run format` rewrites.
+  - **TypeScript/JS/JSON:** Prettier (`.prettierrc.json`: single quotes, 120 columns, no bracket spacing).
+  - **Lint:** ESLint (`eslint.config.mjs`: recommended + typescript-eslint + react-hooks).
+  - **Our C and C++:** clang-format (`native/.clang-format`, 4-space K&R; `native-view/.clang-format`, Google), via `scripts/clang-format.sh`. `fmp4.c`'s box writers are `clang-format off`, to keep their table layout.
+  - **Not formatted:** Markdown, which is wrapped by hand, and `third_party/`.
+- **Commit hook:** `.pre-commit-config.yaml` runs the three checks on staged files (the repo's git hook is pre-commit's).
+
 ## Tooling first
 
 - **Don't invent harnesses for tasks that existing SDK tooling performs.** Before writing a one-off build, script or code path to change device state (purchases, app data, settings), look for the SDK or device tool that does it: the IAP App Tester and its configuration, `vega device …`, `vda`, `loggingctl`. Use that instead, and ask if nothing fits.

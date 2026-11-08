@@ -130,10 +130,10 @@ static size_t stop_bit(const uint8_t *b, size_t nbytes) {
 
 typedef struct {
     uint8_t rbsp[MAX_RBSP];
-    size_t n, end;                         /* RBSP bytes; bit index of the stop bit */
+    size_t n, end; /* RBSP bytes; bit index of the stop bit */
     size_t vui_flag_at, timing_at, after_timing;
     unsigned vui_present, width, height;
-    int has_colour;                        /* video_signal_type_present_flag */
+    int has_colour; /* video_signal_type_present_flag */
     unsigned full_range, primaries, transfer, matrix;
 } sps_info;
 
@@ -206,7 +206,7 @@ static int parse(const uint8_t *sps, size_t len, sps_info *si, reader *r) {
                 bits(r, 32);
         }
         if (bit(r)) bit(r); /* overscan_info_present_flag, overscan_appropriate_flag */
-        if (bit(r)) { /* video_signal_type_present_flag */
+        if (bit(r)) {       /* video_signal_type_present_flag */
             si->has_colour = 1;
             bits(r, 3); /* video_format */
             si->full_range = bit(r);
@@ -261,20 +261,20 @@ size_t sps_set_timing(const uint8_t *sps, size_t len, unsigned fps, uint8_t *out
     if (si.vui_present) {
         copy_bits(&w, &r, 0, si.timing_at);
         put_bit(&w, 1);
-        put_bits(&w, 1, 32);              /* num_units_in_tick */
-        put_bits(&w, fps * 2u, 32);       /* time_scale: two ticks per frame */
-        put_bit(&w, 0);                   /* fixed_frame_rate_flag: iOS is variable-rate */
+        put_bits(&w, 1, 32);                            /* num_units_in_tick */
+        put_bits(&w, fps * 2u, 32);                     /* time_scale: two ticks per frame */
+        put_bit(&w, 0);                                 /* fixed_frame_rate_flag: iOS is variable-rate */
         copy_bits(&w, &r, si.after_timing, si.end + 1); /* rest of the VUI and the stop bit */
     } else {
         copy_bits(&w, &r, 0, si.vui_flag_at);
-        put_bit(&w, 1);                   /* vui_parameters_present_flag */
-        put_bits(&w, 0, 4);               /* aspect, overscan, signal type, chroma loc: absent */
-        put_bit(&w, 1);                   /* timing_info_present_flag */
+        put_bit(&w, 1);     /* vui_parameters_present_flag */
+        put_bits(&w, 0, 4); /* aspect, overscan, signal type, chroma loc: absent */
+        put_bit(&w, 1);     /* timing_info_present_flag */
         put_bits(&w, 1, 32);
         put_bits(&w, fps * 2u, 32);
         put_bit(&w, 0);
-        put_bits(&w, 0, 5);               /* nal/vcl HRD, pic_struct, bitstream_restriction: absent */
-        put_bit(&w, 1);                   /* rbsp_stop_one_bit */
+        put_bits(&w, 0, 5); /* nal/vcl HRD, pic_struct, bitstream_restriction: absent */
+        put_bit(&w, 1);     /* rbsp_stop_one_bit */
     }
     if (w.err) return 0;
     return escape(neu, (w.pos + 7) / 8, out, out_cap);

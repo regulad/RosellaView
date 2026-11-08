@@ -140,8 +140,8 @@ static void audio_sink(int kind, uint8_t *data, size_t len, double sender_ms) {
 static void sentry_sink(uint8_t *data, size_t len) { send_segment(g_sentry, 0, data, len, 0); }
 
 /* Replaces *slot with a threadsafe function for argv[0] if it's a function. */
-static int replace_listener(napi_env env, napi_callback_info info, napi_threadsafe_function *slot,
-                            const char *name, napi_threadsafe_function_call_js call_js) {
+static int replace_listener(napi_env env, napi_callback_info info, napi_threadsafe_function *slot, const char *name,
+                            napi_threadsafe_function_call_js call_js) {
     size_t argc = 1;
     napi_value argv[1];
     napi_valuetype t = napi_undefined;
@@ -153,8 +153,8 @@ static int replace_listener(napi_env env, napi_callback_info info, napi_threadsa
     if (old) napi_release_threadsafe_function(old, napi_tsfn_release);
     if (t == napi_function) {
         napi_threadsafe_function tsfn;
-        if (napi_create_threadsafe_function(env, argv[0], NULL, make_string(env, name), 0, 1, NULL, NULL, NULL,
-                                            call_js, &tsfn) == napi_ok) {
+        if (napi_create_threadsafe_function(env, argv[0], NULL, make_string(env, name), 0, 1, NULL, NULL, NULL, call_js,
+                                            &tsfn) == napi_ok) {
             *slot = tsfn;
         }
     }
@@ -312,6 +312,4 @@ static napi_module g_module = {
 };
 
 /* Entry point the Vega runtime calls for app-provided ("linkDynamic") modules. */
-__attribute__((visibility("default"))) void autoLinkKeplerTurboModulesV1(void) {
-    napi_module_register(&g_module);
-}
+__attribute__((visibility("default"))) void autoLinkKeplerTurboModulesV1(void) { napi_module_register(&g_module); }

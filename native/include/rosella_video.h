@@ -35,8 +35,8 @@ typedef struct {
     int idr;            /* holds an IDR slice */
     /* From the SPS this access unit carries (width 0 when it carries none). */
     unsigned width, height;
-    int full_range;   /* 1 full, 0 limited (also when the SPS doesn't say) */
-    unsigned matrix;  /* ITU-T H.273 matrix coefficients; 2 = unspecified */
+    int full_range;  /* 1 full, 0 limited (also when the SPS doesn't say) */
+    unsigned matrix; /* ITU-T H.273 matrix coefficients; 2 = unspecified */
 } rosella_video_frame;
 
 /* Called on libairplay's mirroring thread; must return quickly. */
@@ -52,9 +52,9 @@ typedef struct {
     uint64_t shown_sender_ns; /* sender time of the frame on screen (0: none yet) */
     uint64_t shown_local_ns;  /* CLOCK_REALTIME when it was presented */
     uint64_t decoded, shown, skipped, late, errors, starts;
-    unsigned width, height;   /* decoded picture */
-    int queued;               /* access units waiting to be decoded */
-    double upload_ms;         /* mean map + de-tile + upload per shown frame */
+    unsigned width, height; /* decoded picture */
+    int queued;             /* access units waiting to be decoded */
+    double upload_ms;       /* mean map + de-tile + upload per shown frame */
 } rosella_video_stats;
 
 /* Attaches (or with NULL detaches) the consumer; returns ROSELLA_VIDEO_ABI.

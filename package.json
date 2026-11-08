@@ -1,0 +1,22 @@
+{
+  "name": "rosellaview-tooling",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "description": "Formatting and linting for the whole repository (app, native/js, native-view/js). The app and native packages have their own package.json.",
+  "scripts": {
+    "format": "prettier --write . && scripts/clang-format.sh --write",
+    "format:check": "prettier --check . && scripts/clang-format.sh --check",
+    "lint": "eslint .",
+    "check": "npm run format:check && npm run lint"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.25.1",
+    "eslint": "9.25.1",
+    "eslint-config-prettier": "10.1.2",
+    "eslint-plugin-react-hooks": "5.2.0",
+    "globals": "16.0.0",
+    "prettier": "3.5.3",
+    "typescript": "5.8.3",
+    "typescript-eslint": "8.31.0"
+  }
+}

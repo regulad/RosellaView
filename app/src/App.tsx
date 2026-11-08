@@ -187,7 +187,8 @@ export const App = () => {
     });
 
     log(`start(${RECEIVER_BASE_NAME}) -> ${Receiver.start(RECEIVER_BASE_NAME)}`);
-    keepAwake.current.set(true);
+    const awake = keepAwake.current;
+    awake.set(true);
     let statsTicks = 0;
     const stats = setInterval(() => {
       const s = Receiver.stats();
@@ -195,7 +196,7 @@ export const App = () => {
         const nv = nativeVideo.current;
         receiverStats(
           s,
-          nv ? nv.metrics() : player.current?.metrics() ?? null,
+          nv ? nv.metrics() : (player.current?.metrics() ?? null),
           audio.current?.metrics() ?? null,
           avSync,
           nv ? nv.state() : null,
@@ -218,9 +219,9 @@ export const App = () => {
       Receiver.onAudio(null);
       closePlayer();
       closeAudio();
-      keepAwake.current.set(false);
+      awake.set(false);
     };
-  }, []);
+  }, [avSync]);
 
   // Entitlement: the cached answer at once, then the Appstore's at launch and
   // on every return to the foreground, so a purchase or refund made elsewhere

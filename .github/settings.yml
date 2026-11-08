@@ -14,11 +14,11 @@
 # Anything omitted is left alone, including `private` and the security flags.
 
 repository:
-  name: "RosellaView"
+  name: 'RosellaView'
 
-  description: "Screen mirroring receiver for iPhone, iPad and Mac on Fire TV (Vega OS), based on UxPlay"
+  description: 'Screen mirroring receiver for iPhone, iPad and Mac on Fire TV (Vega OS), based on UxPlay'
 
-  default_branch: "master"
+  default_branch: 'master'
 
   # ISSUES ONLY. Everything else this app can switch off is off.
   has_issues: true
@@ -27,4 +27,4 @@ repository:
   has_downloads: false
 
   # Max 20, lowercase/digits/hyphens, <=35 chars each (GitHub's rules).
-  topics: "airplay, airplay-receiver, screen-mirroring, uxplay, fire-tv, firetv, vega-os, react-native, node-api, c, cmake"
+  topics: 'airplay, airplay-receiver, screen-mirroring, uxplay, fire-tv, firetv, vega-os, react-native, node-api, c, cmake'

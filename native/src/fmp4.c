@@ -101,7 +101,8 @@ static const uint8_t *next_nal(const uint8_t *b, size_t n, size_t *pos, size_t *
     if (i + 3 > n) return NULL;
     start = i + 3;
     i = start;
-    while (i + 3 <= n && !(b[i] == 0 && b[i + 1] == 0 && (b[i + 2] == 1 || (b[i + 2] == 0 && i + 3 < n && b[i + 3] == 1))))
+    while (i + 3 <= n &&
+           !(b[i] == 0 && b[i + 1] == 0 && (b[i + 2] == 1 || (b[i + 2] == 0 && i + 3 < n && b[i + 3] == 1))))
         i++;
     if (i + 3 > n) i = n;
     *len = i - start;
@@ -111,6 +112,8 @@ static const uint8_t *next_nal(const uint8_t *b, size_t n, size_t *pos, size_t *
 
 /* ---------- segments ---------- */
 
+/* clang-format off: box writers keep the layout of the boxes (matrix rows,
+ * one-line empty boxes, aligned field comments), as in ISO/IEC 14496-12. */
 static void emit_init(fmp4_muxer *m) {
     buf_t w = {0};
     uint8_t sps[MAX_PS + 32];
@@ -134,35 +137,47 @@ static void emit_init(fmp4_muxer *m) {
 
     moov = box(&w, "moov");
     a = fullbox(&w, "mvhd", 0, 0);
-    u32(&w, 0);           /* creation time */
-    u32(&w, 0);           /* modification time */
-    u32(&w, 1000);        /* timescale */
-    u32(&w, 0);           /* duration: fragmented */
-    u32(&w, 0x00010000);  /* rate 1.0 */
-    u16(&w, 0x0100);      /* volume 1.0 */
+    u32(&w, 0);          /* creation time */
+    u32(&w, 0);          /* modification time */
+    u32(&w, 1000);       /* timescale */
+    u32(&w, 0);          /* duration: fragmented */
+    u32(&w, 0x00010000); /* rate 1.0 */
+    u16(&w, 0x0100);     /* volume 1.0 */
     zeros(&w, 10);
-    u32(&w, 0x00010000); u32(&w, 0); u32(&w, 0); /* unity matrix */
-    u32(&w, 0); u32(&w, 0x00010000); u32(&w, 0);
-    u32(&w, 0); u32(&w, 0); u32(&w, 0x40000000);
-    zeros(&w, 24);        /* pre_defined */
-    u32(&w, 2);           /* next track id */
+    u32(&w, 0x00010000);
+    u32(&w, 0);
+    u32(&w, 0); /* unity matrix */
+    u32(&w, 0);
+    u32(&w, 0x00010000);
+    u32(&w, 0);
+    u32(&w, 0);
+    u32(&w, 0);
+    u32(&w, 0x40000000);
+    zeros(&w, 24); /* pre_defined */
+    u32(&w, 2);    /* next track id */
     end(&w, a);
 
     trak = box(&w, "trak");
     a = fullbox(&w, "tkhd", 0, 3); /* enabled | in movie */
     u32(&w, 0);
     u32(&w, 0);
-    u32(&w, 1);          /* track id */
+    u32(&w, 1); /* track id */
     u32(&w, 0);
-    u32(&w, 0);          /* duration */
+    u32(&w, 0); /* duration */
     zeros(&w, 8);
-    u16(&w, 0);          /* layer */
-    u16(&w, 0);          /* alternate group */
-    u16(&w, 0);          /* volume: video */
+    u16(&w, 0); /* layer */
+    u16(&w, 0); /* alternate group */
+    u16(&w, 0); /* volume: video */
     u16(&w, 0);
-    u32(&w, 0x00010000); u32(&w, 0); u32(&w, 0);
-    u32(&w, 0); u32(&w, 0x00010000); u32(&w, 0);
-    u32(&w, 0); u32(&w, 0); u32(&w, 0x40000000);
+    u32(&w, 0x00010000);
+    u32(&w, 0);
+    u32(&w, 0);
+    u32(&w, 0);
+    u32(&w, 0x00010000);
+    u32(&w, 0);
+    u32(&w, 0);
+    u32(&w, 0);
+    u32(&w, 0x40000000);
     u32(&w, wpx << 16);
     u32(&w, hpx << 16);
     end(&w, a);
@@ -173,7 +188,7 @@ static void emit_init(fmp4_muxer *m) {
     u32(&w, 0);
     u32(&w, TIMESCALE);
     u32(&w, 0);
-    u16(&w, 0x55c4);     /* language "und" */
+    u16(&w, 0x55c4); /* language "und" */
     u16(&w, 0);
     end(&w, a);
     a = fullbox(&w, "hdlr", 0, 0);
@@ -200,31 +215,31 @@ static void emit_init(fmp4_muxer *m) {
     u32(&w, 1);
     avc1 = box(&w, "avc1");
     zeros(&w, 6);
-    u16(&w, 1);          /* data reference index */
+    u16(&w, 1); /* data reference index */
     zeros(&w, 16);
     u16(&w, (uint16_t)wpx);
     u16(&w, (uint16_t)hpx);
     u32(&w, 0x00480000); /* 72 dpi */
     u32(&w, 0x00480000);
     u32(&w, 0);
-    u16(&w, 1);          /* frame count */
-    zeros(&w, 32);       /* compressor name */
-    u16(&w, 0x0018);     /* depth */
+    u16(&w, 1);      /* frame count */
+    zeros(&w, 32);   /* compressor name */
+    u16(&w, 0x0018); /* depth */
     u16(&w, 0xffff);
     avcc = box(&w, "avcC");
     u8(&w, 1);
-    u8(&w, m->sps[1]);   /* profile */
-    u8(&w, m->sps[2]);   /* compatibility */
-    u8(&w, m->sps[3]);   /* level */
-    u8(&w, 0xff);        /* 4-byte NAL lengths */
-    u8(&w, 0xe1);        /* one SPS */
+    u8(&w, m->sps[1]);  /* profile */
+    u8(&w, m->sps[2]);  /* compatibility */
+    u8(&w, m->sps[3]);  /* level */
+    u8(&w, 0xff);       /* 4-byte NAL lengths */
+    u8(&w, 0xe1);       /* one SPS */
     if (sps_len == 0) { /* unparseable: fall back to the sender's SPS */
         memcpy(sps, m->sps, m->sps_len);
         sps_len = m->sps_len;
     }
     u16(&w, (uint16_t)sps_len);
     put(&w, sps, sps_len);
-    u8(&w, 1);           /* one PPS */
+    u8(&w, 1); /* one PPS */
     u16(&w, (uint16_t)m->pps_len);
     put(&w, m->pps, m->pps_len);
     end(&w, avcc);
@@ -245,10 +260,19 @@ static void emit_init(fmp4_muxer *m) {
     }
     end(&w, avc1);
     end(&w, stsd);
-    a = fullbox(&w, "stts", 0, 0); u32(&w, 0); end(&w, a);
-    a = fullbox(&w, "stsc", 0, 0); u32(&w, 0); end(&w, a);
-    a = fullbox(&w, "stsz", 0, 0); u32(&w, 0); u32(&w, 0); end(&w, a);
-    a = fullbox(&w, "stco", 0, 0); u32(&w, 0); end(&w, a);
+    a = fullbox(&w, "stts", 0, 0);
+    u32(&w, 0);
+    end(&w, a);
+    a = fullbox(&w, "stsc", 0, 0);
+    u32(&w, 0);
+    end(&w, a);
+    a = fullbox(&w, "stsz", 0, 0);
+    u32(&w, 0);
+    u32(&w, 0);
+    end(&w, a);
+    a = fullbox(&w, "stco", 0, 0);
+    u32(&w, 0);
+    end(&w, a);
     end(&w, stbl);
     end(&w, minf);
     end(&w, mdia);
@@ -256,8 +280,8 @@ static void emit_init(fmp4_muxer *m) {
 
     mvex = box(&w, "mvex");
     a = fullbox(&w, "trex", 0, 0);
-    u32(&w, 1);          /* track id */
-    u32(&w, 1);          /* default sample description */
+    u32(&w, 1); /* track id */
+    u32(&w, 1); /* default sample description */
     u32(&w, 0);
     u32(&w, 0);
     u32(&w, 0);
@@ -316,6 +340,8 @@ static void emit_media(fmp4_muxer *m, const buf_t *sample, int sync, uint32_t du
 }
 
 /* ---------- public API ---------- */
+
+/* clang-format on */
 
 fmp4_muxer *fmp4_create(fmp4_output out, void *ctx) {
     fmp4_muxer *m = calloc(1, sizeof *m);
@@ -429,6 +455,8 @@ struct fmp4_audio {
 };
 
 /* MPEG-4 descriptor (ISO/IEC 14496-1 8.3.3) with a one-byte length. */
+/* clang-format off: box writers keep the layout of the boxes (matrix rows,
+ * one-line empty boxes, aligned field comments), as in ISO/IEC 14496-12. */
 static size_t descriptor(buf_t *w, uint8_t tag) {
     size_t at;
     u8(w, tag);
@@ -457,9 +485,15 @@ static void emit_audio_init(fmp4_audio *a) {
     u32(&w, 0x00010000);
     u16(&w, 0x0100);
     zeros(&w, 10);
-    u32(&w, 0x00010000); u32(&w, 0); u32(&w, 0);
-    u32(&w, 0); u32(&w, 0x00010000); u32(&w, 0);
-    u32(&w, 0); u32(&w, 0); u32(&w, 0x40000000);
+    u32(&w, 0x00010000);
+    u32(&w, 0);
+    u32(&w, 0);
+    u32(&w, 0);
+    u32(&w, 0x00010000);
+    u32(&w, 0);
+    u32(&w, 0);
+    u32(&w, 0);
+    u32(&w, 0x40000000);
     zeros(&w, 24);
     u32(&w, 2);
     end(&w, b);
@@ -476,9 +510,15 @@ static void emit_audio_init(fmp4_audio *a) {
     u16(&w, 1);      /* alternate group */
     u16(&w, 0x0100); /* volume 1.0 */
     u16(&w, 0);
-    u32(&w, 0x00010000); u32(&w, 0); u32(&w, 0);
-    u32(&w, 0); u32(&w, 0x00010000); u32(&w, 0);
-    u32(&w, 0); u32(&w, 0); u32(&w, 0x40000000);
+    u32(&w, 0x00010000);
+    u32(&w, 0);
+    u32(&w, 0);
+    u32(&w, 0);
+    u32(&w, 0x00010000);
+    u32(&w, 0);
+    u32(&w, 0);
+    u32(&w, 0);
+    u32(&w, 0x40000000);
     u32(&w, 0);
     u32(&w, 0);
     end(&w, b);
@@ -540,9 +580,9 @@ static void emit_audio_init(fmp4_audio *a) {
         u8(&w, 0x40);              /* MPEG-4 Audio */
         u8(&w, 0x15);              /* audio stream */
         u8(&w, 0);
-        u16(&w, 0);                /* buffer size */
-        u32(&w, 0);                /* max bitrate */
-        u32(&w, 0);                /* avg bitrate */
+        u16(&w, 0);                 /* buffer size */
+        u32(&w, 0);                 /* max bitrate */
+        u32(&w, 0);                 /* avg bitrate */
         dsi = descriptor(&w, 0x05); /* DecoderSpecificInfo: AudioSpecificConfig */
         put(&w, a->config, a->config_len);
         end_descriptor(&w, dsi);
@@ -555,10 +595,19 @@ static void emit_audio_init(fmp4_audio *a) {
     }
     end(&w, entry);
     end(&w, stsd);
-    b = fullbox(&w, "stts", 0, 0); u32(&w, 0); end(&w, b);
-    b = fullbox(&w, "stsc", 0, 0); u32(&w, 0); end(&w, b);
-    b = fullbox(&w, "stsz", 0, 0); u32(&w, 0); u32(&w, 0); end(&w, b);
-    b = fullbox(&w, "stco", 0, 0); u32(&w, 0); end(&w, b);
+    b = fullbox(&w, "stts", 0, 0);
+    u32(&w, 0);
+    end(&w, b);
+    b = fullbox(&w, "stsc", 0, 0);
+    u32(&w, 0);
+    end(&w, b);
+    b = fullbox(&w, "stsz", 0, 0);
+    u32(&w, 0);
+    u32(&w, 0);
+    end(&w, b);
+    b = fullbox(&w, "stco", 0, 0);
+    u32(&w, 0);
+    end(&w, b);
     end(&w, stbl);
     end(&w, minf);
     end(&w, mdia);
@@ -579,6 +628,8 @@ static void emit_audio_init(fmp4_audio *a) {
 
     a->out(a->ctx, FMP4_INIT, w.b, w.n, 0);
 }
+
+/* clang-format on */
 
 fmp4_audio *fmp4_audio_create(fmp4_output out, void *ctx) {
     fmp4_audio *a = calloc(1, sizeof *a);

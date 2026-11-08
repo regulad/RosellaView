@@ -131,8 +131,14 @@ export function initSentry(): void {
     attachStacktrace: true,
     maxBreadcrumbs: 200,
     stackParser,
-    integrations: [eventFiltersIntegration(), functionToStringIntegration(), linkedErrorsIntegration(), dedupeIntegration()],
-    transport: (transportOptions) => createTransport(transportOptions, (request) => post(transportOptions.url, request.body)),
+    integrations: [
+      eventFiltersIntegration(),
+      functionToStringIntegration(),
+      linkedErrorsIntegration(),
+      dedupeIntegration(),
+    ],
+    transport: (transportOptions) =>
+      createTransport(transportOptions, (request) => post(transportOptions.url, request.body)),
   };
   applySdkMetadata(options, 'vega');
   initAndBind(VegaClient, options);

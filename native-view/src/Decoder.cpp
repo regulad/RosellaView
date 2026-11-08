@@ -175,7 +175,8 @@ bool Decoder::open(int width, int height) {
     auto process = apmf::GetProcessObject();
     auto descriptors =
         process->getComponent("/com.amazon.kepler.media_descriptor").TryQueryInterface<md::IMediaDescriptorFactory>();
-    auto queues = process->getComponent("/com.amazon.kepler.buffer_queue").TryQueryInterface<kq::IBufferQueueModuleFactory>();
+    auto queues =
+        process->getComponent("/com.amazon.kepler.buffer_queue").TryQueryInterface<kq::IBufferQueueModuleFactory>();
     auto graphics = process->getComponent("/com.amazon.kepler.graphics").TryQueryInterface<kg::IGraphicsModule>();
     auto factory = process->getComponent("/com.amazon.kepler.media_transform").TryQueryInterface<mt::IMediaFactory>();
     if (!descriptors || !queues || !graphics || !factory) {
@@ -206,7 +207,8 @@ bool Decoder::open(int width, int height) {
     impl_ = std::move(impl);
     width_ = width;
     height_ = height;
-    auto const ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
+    auto const ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
     log_("decoder: opened for " + std::to_string(width) + "x" + std::to_string(height) + " in " + std::to_string(ms) +
          " ms" + (impl_->listener->started ? "" : " (no onStart yet)"));
     return true;
