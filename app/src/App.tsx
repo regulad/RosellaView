@@ -371,9 +371,11 @@ export const App = () => {
       <Text style={styles.line}>Open AirPlay and select</Text>
       <Text style={styles.name}>{receiverName}</Text>
       {sender ? <Text style={styles.subtle}>Connecting to {sender}…</Text> : null}
-      {unlocked ? null : (
-        // The only focusable element: unfocused until the first remote press,
-        // and pinned to the bottom so the instructions stay centred.
+      {/* The purchase button and About link give way to "Connecting to…",
+          which would otherwise run into them. */}
+      {unlocked || sender ? null : (
+        // Unfocused until the first remote press, and pinned to the bottom
+        // so the instructions stay centred.
         <Pressable
           disabled={buying}
           onPress={onRemoveWatermark}
@@ -385,9 +387,11 @@ export const App = () => {
           )}
         </Pressable>
       )}
-      <Pressable onPress={() => setShowAbout(true)} style={styles.about}>
-        {({focused}) => <Text style={[styles.aboutText, focused && styles.aboutTextFocused]}>About & privacy</Text>}
-      </Pressable>
+      {sender ? null : (
+        <Pressable onPress={() => setShowAbout(true)} style={styles.about}>
+          {({focused}) => <Text style={[styles.aboutText, focused && styles.aboutTextFocused]}>About & privacy</Text>}
+        </Pressable>
+      )}
     </View>
   );
 };
