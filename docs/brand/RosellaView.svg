@@ -1,10 +1,1 @@
-<svg width="660" height="660" viewBox="0 0 660 660" fill="none" xmlns="http://www.w3.org/2000/svg">
-<rect width="660" height="660" fill="#F5F5F5"/>
-<rect width="660" height="660" fill="white"/>
-<rect x="88" y="215" width="484" height="231" rx="28" stroke-width="28" stroke="black"/>
-<line x1="125" y1="318" x2="125" y2="344" stroke-width="28" stroke-linecap="round" stroke="black"/>
-<line x1="205.093" y1="75.9589" x2="464.959" y2="175.907" stroke-width="28" stroke-linecap="round" stroke="black"/>
-<line x1="205" y1="76" x2="205" y2="176" stroke-width="28" stroke-linecap="round" stroke="black"/>
-<line x1="454.907" y1="585.041" x2="195.041" y2="485.093" stroke-width="28" stroke-linecap="round" stroke="black"/>
-<line x1="455" y1="585" x2="455" y2="485" stroke-width="28" stroke-linecap="round" stroke="black"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="660" height="660" fill="none" viewBox="0 0 660 660"><rect width="660" height="660" fill="#F5F5F5"/><rect width="660" height="660" fill="#fff"/><rect width="484" height="231" x="88" y="215" stroke="#000" stroke-width="28" rx="28"/><line x1="125" x2="125" y1="318" y2="344" stroke="#000" stroke-linecap="round" stroke-width="28"/><line x1="205.093" x2="464.959" y1="75.959" y2="175.907" stroke="#000" stroke-linecap="round" stroke-width="28"/><line x1="205" x2="205" y1="76" y2="176" stroke="#000" stroke-linecap="round" stroke-width="28"/><line x1="454.907" x2="195.041" y1="585.041" y2="485.093" stroke="#000" stroke-linecap="round" stroke-width="28"/><line x1="455" x2="455" y1="585" y2="485" stroke="#000" stroke-linecap="round" stroke-width="28"/></svg>
