@@ -13,12 +13,16 @@ The listing rules come from `.claude/docs/PLAN.md` §1.3 and apply to every fiel
 
 ```
 assets/
-  icon.png                  App icon
-  background.png            Background image
-  screenshots/
+  firetv-icon.png           Fire TV app icon (landscape)
+  firetv-background.png     Fire TV background image
+  firetv-screenshots/
     01-<what>.png           Screenshots, 3 to 10, in listing order
     02-<what>.png
-    03-<what>.png
+    …
+  tablet-icon-512.png       Tablet icon A
+  tablet-icon-114.png       Tablet icon B
+  tablet-screenshots ->     Symlink to firetv-screenshots: the console asks for
+                            tablet assets even for a TV-only app, and these do
   listing/
     title.txt               Display title
     short-description.txt   Short description
@@ -27,9 +31,12 @@ assets/
     keywords.txt            Keywords, space-delimited, one line
   iap/
     in-app-items.csv        In-app items, for the console's CSV import
-  sources/                  What the images are made from: icon.svg, background.svg,
-                            and render.sh, which renders them to the PNGs above
+  sources/                  What the images are made from (firetv-icon.svg,
+                            firetv-background.svg, tablet-icon.svg) and
+                            render.sh, which renders them to the PNGs above
 ```
+
+Platform-specific assets carry a `firetv-` or `tablet-` prefix. The text, the in-app items and the sources are shared.
 
 The images are committed as the exact files to upload, so nothing has to be rebuilt at submission time. Their sources go in `sources/`. The logo and mark already live in `docs/brand/`; reference them rather than copying.
 
@@ -37,11 +44,14 @@ The images are committed as the exact files to upload, so nothing has to be rebu
 
 | File | Size | Format | Notes |
 |---|---|---|---|
-| `icon.png` | 1280 × 720 px | PNG, no transparency | Landscape, not square: it's the Fire TV home-screen tile. Original art only: no AirPlay glyph, no "AirPlay" wording. Fill the whole frame with an opaque background. |
-| `screenshots/NN-*.png` | 1920 × 1080 px | PNG | 3 minimum, 10 maximum. Amazon also accepts JPG; we use PNG. Real captures of the app on a TV. A mirrored iPhone or Mac screen is fine, but avoid showing other apps' copyrighted content, and don't show Apple's AirPlay glyph from the sender's UI. |
-| `background.png` | 1920 × 1080 px | PNG | Shown behind the listing on Fire TV. JPG accepted; we use PNG. Keep the centre and left calm: the Appstore overlays the title, buttons and text there. |
+| `firetv-icon.png` | 1280 × 720 px | PNG, no transparency | Landscape, not square: it's the Fire TV home-screen tile. Original art only: no AirPlay glyph, no "AirPlay" wording. Fill the whole frame with an opaque background. |
+| `firetv-screenshots/NN-*.png` | 1920 × 1080 px | PNG | 3 minimum, 10 maximum. Amazon also accepts JPG; we use PNG. Real captures of the app on a TV (`firetv-screenshots/README.md` says how). |
+| `firetv-background.png` | 1920 × 1080 px | PNG | Shown behind the listing on Fire TV. JPG accepted; we use PNG. Keep the centre and left calm: the Appstore overlays the title, buttons and text there. |
+| `tablet-icon-512.png` | 512 × 512 px | PNG | Tablet icon A (the console requires tablet assets even though RosellaView targets Fire TV only). The logo on white. |
+| `tablet-icon-114.png` | 114 × 114 px | PNG | Tablet icon B, from the same source. |
+| `tablet-screenshots/` | | | A symlink to `firetv-screenshots/`: the same files are uploaded for both. |
 
-"No transparency" means no alpha channel at all, not just an opaque alpha channel. Export as RGB. To check: `file icon.png` should say `8-bit/color RGB`, not `RGBA`.
+"No transparency" means no alpha channel at all, not just an opaque alpha channel. Export as RGB. To check: `file firetv-icon.png` should say `8-bit/color RGB`, not `RGBA`.
 
 ## Text
 

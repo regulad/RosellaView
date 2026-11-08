@@ -10,6 +10,8 @@ cd "$(dirname "$0")/.."
 render() { # source width height output
   rsvg-convert -w "$2" -h "$3" "sources/$1" | magick - -background white -alpha remove -alpha off -strip "PNG24:$4"
 }
-render icon.svg 1280 720 icon.png
-render background.svg 1920 1080 background.png
-file icon.png background.png
+render firetv-icon.svg 1280 720 firetv-icon.png
+render firetv-background.svg 1920 1080 firetv-background.png
+render tablet-icon.svg 512 512 tablet-icon-512.png
+render tablet-icon.svg 114 114 tablet-icon-114.png
+file firetv-icon.png firetv-background.png tablet-icon-512.png tablet-icon-114.png
