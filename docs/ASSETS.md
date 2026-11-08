@@ -6,6 +6,7 @@ The listing rules come from `.claude/docs/PLAN.md` §1.3 and apply to every fiel
 
 - **"AirPlay" appears once,** in the description, followed by "RosellaView is not affiliated with or endorsed by Apple Inc. AirPlay is a trademark of Apple Inc." Never "Works with Apple AirPlay". Never Apple's AirPlay glyph in any image, and never "AirPlay" in the title or icon.
 - **Never "Vega"** in any field (Amazon's rule).
+- **Apple's marks:** in each text field, the first mention of a registered Apple trademark carries ®: AirPlay®, iPhone®, iPad®, Mac®, Safari®. Each description ends with Apple's attribution: "Apple, … are trademarks of Apple Inc., registered in the U.S. and other countries and regions." List only the marks that field uses, alongside the non-affiliation line. Other companies' marks (YouTube) get their own line: "YouTube is a trademark of Google LLC."
 - **Say "Based on UxPlay (GPLv3). Source code: https://github.com/regulad/RosellaView."** in the long description.
 
 ## Layout

@@ -1,4 +1,4 @@
-RosellaView turns your Fire TV into a screen mirroring receiver for iPhone, iPad and Mac. Show photos and videos to the room, present from your laptop, or put a game or app from your phone on the big screen, with its sound.
+RosellaView turns your Fire TV into a screen mirroring receiver for iPhone®, iPad® and Mac®. Show photos and videos to the room, present from your laptop, or put a game or app from your phone on the big screen, with its sound.
 
 HOW TO USE IT
 1. Open RosellaView on your Fire TV. It shows the name of this TV.
@@ -11,7 +11,7 @@ WHAT YOU GET
 - Accurate colour: the full range of brightness iPhones and iPads send, from the darkest shadows to the brightest highlights.
 - Smooth motion, up to 60 frames per second when your device sends it.
 - Lip sync that stays on track, with an audio delay you can fine-tune with left and right on the remote.
-- Video inside mirrored apps, such as Photos, Safari and YouTube, and full-screen video from a Mac.
+- Video inside mirrored apps, such as Photos, Safari® and YouTube, and full-screen video from a Mac.
 - Music and podcasts with screen mirroring off, played as audio only.
 
 FREE, WITH A WATERMARK
@@ -27,3 +27,5 @@ What you mirror stays on your network: it goes only from your device to this TV 
 
 OPEN SOURCE
 Based on UxPlay (GPLv3). Source code: https://github.com/regulad/RosellaView
+
+RosellaView is not affiliated with or endorsed by Apple Inc. Apple, iPhone, iPad, Mac and Safari are trademarks of Apple Inc., registered in the U.S. and other countries and regions. YouTube is a trademark of Google LLC.
