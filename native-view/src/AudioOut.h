@@ -15,6 +15,7 @@
  */
 #pragma once
 
+#include <climits>
 #include <condition_variable>
 #include <cstdint>
 #include <deque>
@@ -55,6 +56,10 @@ class AudioOut {
   std::condition_variable wake_;
   std::deque<Chunk> queue_;
   size_t queuedFrames_ = 0;
+  // How early each buffer arrives against when it's due to be heard (ms;
+  // negative: late), over the report window.
+  int64_t leadMinMs_ = INT64_MAX, leadMaxMs_ = INT64_MIN, leadSumMs_ = 0, leadCount_ = 0;
+  int64_t streamLatencyMs_ = 73;
   bool stop_ = false;
 };
 

@@ -10,6 +10,7 @@
 
 #include <errno.h>
 #include <inttypes.h>
+#include <math.h>
 #include <pthread.h>
 #include <stdarg.h>
 #include <stdatomic.h>
@@ -368,12 +369,27 @@ static rosella_audio_consumer g_audio_consumer;
 static int g_audio_consumer_on;
 static raop_ntp_t *g_audio_ntp; /* the current connection's clock sync, for local times */
 static atomic_int g_native_audio_latency_ms = NATIVE_LATENCY_DEFAULT_MS;
+/* The sender's volume as linear gain in Q15 (32768 = full), for native audio;
+ * the MSE path sets it on its player in JS (App.tsx airplayVolume). */
+static atomic_int g_native_gain_q15 = 32768;
 
 static void native_pcm(void *ctx, const int16_t *pcm, size_t frames, uint64_t sender_ns) {
     uint64_t local_ns = 0;
     (void)ctx; /* called under g_audio_lock, from audio_push */
     if (!g_audio_consumer_on) return;
     if (sender_ns && g_audio_ntp) local_ns = raop_ntp_convert_remote_time(g_audio_ntp, sender_ns);
+    int gain = atomic_load(&g_native_gain_q15);
+    if (gain < 32768) {
+        int16_t scaled[4096 * 2];
+        for (size_t done = 0; done < frames;) {
+            size_t n = frames - done < 4096 ? frames - done : 4096;
+            for (size_t i = 0; i < n * 2; i++) scaled[i] = (int16_t)(((int32_t)pcm[done * 2 + i] * gain) >> 15);
+            g_audio_consumer.pcm(g_audio_consumer.ctx, scaled, n, 44100, 2, sender_ns,
+                                 local_ns ? local_ns + done * 1000000000ull / 44100 : 0);
+            done += n;
+        }
+        return;
+    }
     g_audio_consumer.pcm(g_audio_consumer.ctx, pcm, frames, 44100, 2, sender_ns, local_ns);
 }
 
@@ -598,6 +614,10 @@ static double cb_audio_set_client_volume(void *cls) {
 
 static void cb_audio_set_volume(void *cls, float volume) {
     (void)cls;
+    /* AirPlay volume: -30..0 dB, -144 = mute (as airplayVolume in App.tsx). */
+    atomic_store(&g_native_gain_q15, volume <= -30.0f ? 0
+                                     : volume >= 0.0f ? 32768
+                                                      : (int)(32768.0f * powf(10.0f, volume / 20.0f)));
     emit("{\"type\":\"volume\",\"db\":%.2f}", volume);
 }
 

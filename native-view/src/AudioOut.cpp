@@ -117,6 +117,15 @@ void AudioOut::push(int16_t const* pcm, size_t frames, uint64_t localNs) {
     Chunk c;
     c.pcm.assign(pcm, pcm + frames * kChannels);
     c.localNs = localNs;
+    if (localNs) {
+      int64_t const lead = ((int64_t)localNs + (int64_t)latencyMs_() * 1'000'000 -
+                            ((int64_t)realtimeNs() + streamLatencyMs_ * 1'000'000)) /
+                           1'000'000;
+      leadMinMs_ = std::min(leadMinMs_, lead);
+      leadMaxMs_ = std::max(leadMaxMs_, lead);
+      leadSumMs_ += lead;
+      leadCount_++;
+    }
     queue_.push_back(std::move(c));
     queuedFrames_ += frames;
     while (queuedFrames_ > kMaxQueuedFrames) {
@@ -258,15 +267,24 @@ void AudioOut::run() {
         lastReport = now;
         streamLatencyNs = (int64_t)playback->getLatencyInMs() * 1'000'000;
         size_t queued;
+        std::string lead = "n/a";
         {
           std::lock_guard<std::mutex> lock(mutex_);
           queued = queuedFrames_;
+          streamLatencyMs_ = streamLatencyNs / 1'000'000;
+          if (leadCount_) {
+            lead = std::to_string(leadMinMs_) + "/" + std::to_string(leadSumMs_ / leadCount_) + "/" +
+                   std::to_string(leadMaxMs_) + " ms";
+          }
+          leadMinMs_ = INT64_MAX;
+          leadMaxMs_ = INT64_MIN;
+          leadSumMs_ = leadCount_ = 0;
         }
         log_("audio: stream latency " + std::to_string(streamLatencyNs / 1'000'000) + " ms, target " +
-             std::to_string(latencyMs_()) + " ms, queued " + ms(queued) + "; played " + ms(played) + ", silence " +
-             ms(silence) + ", dropped late " + ms(dropped) + ", waits " + std::to_string(waited) + ", underruns " +
-             std::to_string(playback->getUnderrunCount()) + ", write errors " + std::to_string(errors) +
-             (streamListener->died ? ", stream died" : ""));
+             std::to_string(latencyMs_()) + " ms, queued " + ms(queued) + ", arrival lead min/avg/max " + lead +
+             "; played " + ms(played) + ", silence " + ms(silence) + ", dropped late " + ms(dropped) + ", waits " +
+             std::to_string(waited) + ", underruns " + std::to_string(playback->getUnderrunCount()) +
+             ", write errors " + std::to_string(errors) + (streamListener->died ? ", stream died" : ""));
       }
     }
     try {

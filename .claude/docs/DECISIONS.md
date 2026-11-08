@@ -305,4 +305,7 @@ The laptop's `create_ap` AP now runs with `IEEE80211N=1`, started via `create_ap
   - `Receiver.setVideoLatency` / `setAudioLatency`, from `NativeVideo`.
   - Audio = video latency + the viewer's delay, never under 50 ms: sound can't be heard before it arrives, and a lower target would only drop it.
 
+- **Volume:** the sender's AirPlay volume (−30…0 dB, −144 = mute) is applied as gain to the PCM in the receiver, with the same curve as the MSE player's volume in JS. A receiver can't tell senders it has no volume control (`volumeControlType` 1–4 behave alike, per openairplay's airplay2-receiver), and ignoring it would leave the sender's slider doing nothing.
+- **Audio timestamps are play-out times, not capture times:** AirPlay stamps audio with when it should be heard and sends it ahead. At 150 ms target, buffers arrive 200–400 ms before they're due (avg ~340 ms; 2026-11-08, music video), so audio waits ~350 ms in our queue and nothing is dropped or padded in steady play. The 30 s audio report logs this "arrival lead". One earlier session showed ~40% of audio dropped late and padded with silence in every window, unexplained (possibly clock sync not yet settled); the lead figures will show it if it recurs.
+
 **Compatibility Mode** keeps the MSE path for both, with D8's sync.
