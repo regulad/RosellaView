@@ -89,5 +89,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" out/*.vpkg --title "RosellaView ${GITHUB_REF_NAME}" \
-            --notes "Production build of ${GITHUB_SHA}. Upload rosellaview_armv7.vpkg (and aarch64) in the Amazon Developer Console."
+          # Only armv7 ships: it's the Fire TV Stick build, and the one Amazon's
+          # docs say to submit. x86_64 and aarch64 are for the Vega Virtual
+          # Device (Intel and Apple-silicon hosts); they stay in the artifact.
+          gh release create "${GITHUB_REF_NAME}" out/rosellaview_armv7.vpkg --title "RosellaView ${GITHUB_REF_NAME}" \
+            --notes "Production build of ${GITHUB_SHA}. Submit rosellaview_armv7.vpkg in the Amazon Developer Console."

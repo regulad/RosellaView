@@ -44,6 +44,14 @@ if ! git -C "$ROOT" diff --quiet HEAD -- app native native-view ':!app/package-l
   GIT="$GIT-dirty.$(date +%s)"
 fi
 RELEASE="rosellaview@$VERSION+$GIT"
+# A clean production build of the commit tagged v<version> (CI's release
+# builds) is just the version: rosellaview@0.1.0. Development builds keep the
+# sha, so their source maps never land in the release's.
+TAG=${GITHUB_REF_TYPE:+${GITHUB_REF_NAME}}
+[ -n "$TAG" ] || TAG=$(git -C "$ROOT" describe --exact-match --tags HEAD 2> /dev/null || true)
+if [ "$ENVIRONMENT" = production ] && [ "$TAG" = "v$VERSION" ] && [ "${GIT%%-dirty*}" = "$GIT" ]; then
+  RELEASE="rosellaview@$VERSION"
+fi
 DIST=vega
 
 # Stamp the release into the bundle, and (development builds only) let the
