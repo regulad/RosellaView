@@ -8,6 +8,7 @@
 import {AsyncStorage} from '@amazon-devices/react-native-kepler';
 import {
   FulfillmentResult,
+  ProductDataResponseCode,
   PurchaseResponseCode,
   PurchaseUpdatesResponseCode,
   PurchasingService,
@@ -15,6 +16,12 @@ import {
 
 /** Entitlement SKU; must match the in-app item in the developer console. */
 export const UNLOCK_SKU = 'rosellaview.remove_watermark';
+/**
+ * The item's title in the catalogue (assets/iap/in-app-items.csv). The
+ * purchase button shows the Appstore's title for it (unlockTitle); this is
+ * only the fallback, and must match it: a mismatch failed build 2's review.
+ */
+export const UNLOCK_TITLE = 'Remove watermark';
 
 type Log = (msg: string) => void;
 
@@ -62,6 +69,19 @@ export async function isUnlocked(log: Log): Promise<boolean | null> {
   }
   cache(unlocked);
   return unlocked;
+}
+
+/** The unlock's title as the Appstore lists it, or null if it can't say. */
+export async function unlockTitle(log: Log): Promise<string | null> {
+  const res = await PurchasingService.getProductData({skus: [UNLOCK_SKU]});
+  if (res.responseCode !== ProductDataResponseCode.SUCCESSFUL) {
+    log(`getProductData failed: code ${res.responseCode}`);
+    return null;
+  }
+  // A Map per the typings; tolerate a plain object too.
+  const data = res.productData as unknown as Map<string, {title?: string}> | Record<string, {title?: string}>;
+  const product = data instanceof Map ? data.get(UNLOCK_SKU) : data?.[UNLOCK_SKU];
+  return product?.title || null;
 }
 
 /** Starts the Appstore purchase flow. Resolves true once the unlock is owned. */

@@ -21,6 +21,16 @@ id = "com.amazon.network.privilege.net-info"
 id = "/com.amazon.kepler.appstore.iap.purchase.core@IAppstoreIAPPurchaseCoreService"
 
 [wants]
+# In-app purchasing: the Appstore's IAP service and its purchase UI, as the
+# keplerscript-appstore-iap-lib README specifies. Without them every request
+# fails (purchase code 4, purchase updates code 3): build 2's review. Dev
+# builds also get App Tester's service (scripts/build.sh).
+[[wants.service]]
+id = "com.amazon.iap.core.service"
+
+[[wants.module]]
+id = "/com.amazon.iap.core@IIAPCoreUI"
+
 [[wants.service]]
 id = "com.amazon.network.service"
 

@@ -16,7 +16,7 @@ import {AvSync} from './AvSync';
 import {KeepAwake} from './KeepAwake';
 import {MirrorPlayer} from './MirrorPlayer';
 import {NativeVideo} from './NativeVideo';
-import {buyUnlock, cachedUnlocked, isUnlocked} from './Purchases';
+import {buyUnlock, cachedUnlocked, isUnlocked, UNLOCK_TITLE, unlockTitle} from './Purchases';
 import {log, receiverEvent, receiverStats, resetStats, warn} from './Telemetry';
 import {Watermark} from './Watermark';
 
@@ -63,6 +63,8 @@ export const App = () => {
   const [audioOnly, setAudioOnly] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
   const [buying, setBuying] = useState(false);
+  // The button says what the Appstore calls the item (review checks they match).
+  const [buyTitle, setBuyTitle] = useState(UNLOCK_TITLE);
   const [videoSize, setVideoSize] = useState<[number, number]>([0, 0]);
   const player = useRef<MirrorPlayer | null>(null);
   // Video goes to the native pipeline (RosellaSurface) unless the viewer has
@@ -265,6 +267,12 @@ export const App = () => {
   }, []);
 
   useEffect(() => {
+    unlockTitle(log)
+      .then((t) => t && setBuyTitle(t))
+      .catch((e) => log(`product data failed: ${String(e)}`));
+  }, []);
+
+  useEffect(() => {
     Receiver.setWatermark(!unlocked);
   }, [unlocked]);
 
@@ -382,7 +390,7 @@ export const App = () => {
           style={({focused}) => [styles.button, focused && styles.buttonFocused]}>
           {({focused}) => (
             <Text style={[styles.buttonText, focused && styles.buttonTextFocused]}>
-              {buying ? 'Opening Appstore…' : 'Remove audiovisual watermark'}
+              {buying ? 'Opening Appstore…' : buyTitle}
             </Text>
           )}
         </Pressable>
