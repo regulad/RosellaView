@@ -39,6 +39,10 @@ fi
 # and the tag a release is built from (CI).
 BUILD_NUMBER=$(sed -n 's/^version *= *"\([0-9][0-9]*\)".*/\1/p' "$APP/manifest.toml")
 [ -n "$BUILD_NUMBER" ] || { echo "no integer version in $APP/manifest.toml" >&2; exit 1; }
+# package.json carries it too, as <build>.0.0 (scripts/bump.sh sets both).
+PACKAGE_VERSION=$(sed -n 's/^  "version": "\(.*\)".*/\1/p' "$APP/package.json")
+[ "$PACKAGE_VERSION" = "$BUILD_NUMBER.0.0" ] \
+  || { echo "app/package.json version $PACKAGE_VERSION != $BUILD_NUMBER.0.0 (run scripts/bump.sh $BUILD_NUMBER)" >&2; exit 1; }
 # Production IAP verifies the Appstore's responses with the app's public key
 # (developer console: Upload Your App File > View public key). Without it,
 # purchase() fails with code 4: build 3's review.
