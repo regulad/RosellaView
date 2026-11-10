@@ -3,9 +3,10 @@ schema-version = 1
 [package]
 title = "RosellaView"
 icon = "@image/app_icon.png"
-version = "0.2.0"
-# Pass an increasing --build-number for every Appstore upload.
-build-number = 3
+# The build number is the only release identifier (Appstore, git tag, Sentry);
+# version is the same number as <build>.0.0, which scripts/build.sh enforces.
+version = "4.0.0"
+build-number = 4
 id = "xyz.regulad.rosellaview"
 
 [os.version]

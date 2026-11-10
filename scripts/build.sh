@@ -38,6 +38,19 @@ fi
 # Appstore uses, and the tag a release is built from (scripts/build.sh, CI).
 BUILD_NUMBER=$(sed -n 's/^build-number *= *\([0-9][0-9]*\).*/\1/p' "$APP/manifest.toml")
 [ -n "$BUILD_NUMBER" ] || { echo "no build-number in $APP/manifest.toml" >&2; exit 1; }
+# The version name the Appstore shows follows it: <build>.0.0, in the
+# manifest and package.json alike.
+for v in "$(sed -n 's/^version *= *"\(.*\)".*/\1/p' "$APP/manifest.toml")" \
+  "$(sed -n 's/^  "version": "\(.*\)".*/\1/p' "$APP/package.json")"; do
+  [ "$v" = "$BUILD_NUMBER.0.0" ] || { echo "version $v != $BUILD_NUMBER.0.0 (build-number)" >&2; exit 1; }
+done
+# Production IAP verifies the Appstore's responses with the app's public key
+# (developer console: Upload Your App File > View public key). Without it,
+# purchase() fails with code 4: build 3's review.
+if [ "$ENVIRONMENT" = production ] && [ ! -s "$APP/assets/raw/AppstoreAuthenticationKey.pem" ]; then
+  echo "missing $APP/assets/raw/AppstoreAuthenticationKey.pem (production IAP)" >&2
+  exit 1
+fi
 GIT=$(git -C "$ROOT" rev-parse --short=12 HEAD)
 # app/package-lock.json changes on every build (the local module tarball's
 # checksum), so it doesn't count.

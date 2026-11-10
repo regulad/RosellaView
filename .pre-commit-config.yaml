@@ -11,7 +11,7 @@ repos:
         exclude: ^third_party/
       - id: eslint
         name: eslint
-        entry: npx eslint --max-warnings 0
+        entry: npx eslint --max-warnings 0 --no-warn-ignored
         language: system
         types_or: [ts, tsx, javascript]
         exclude: ^third_party/
