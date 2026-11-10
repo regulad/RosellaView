@@ -48,7 +48,7 @@ id = "com.amazon.devconf.privilege.accessibility"
 
 ## D2. Test network: 802.11n on the lab AP (2026-11-06)
 
-The laptop's `create_ap` AP now runs with `IEEE80211N=1`, started via `create_ap.service` (not enabled at boot) instead of the Linux WiFi Hotspot GUI, which rewrote the config back to 802.11g. Throughput to the stick went from about 10 to 38 Mbit/s.
+The laptop's `create_ap` AP now runs with `IEEE80211N=1`, started via `bridge-ap.service` (create_ap under a hand-started unit; setup in the [Vega notes gist](https://gist.github.com/regulad/d06a96cfe3de8dcf0b13f5df629b9e0b#file-bridge-ap-md)) instead of the Linux WiFi Hotspot GUI, which rewrote the config back to 802.11g. Throughput to the stick went from about 10 to 38 Mbit/s.
 
 ## D3. Audio: decode, then FLAC verbatim frames in MSE (2026-11-07)
 
