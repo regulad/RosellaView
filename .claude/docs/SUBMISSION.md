@@ -9,11 +9,11 @@ The owner does the submission; nothing here is automated. Listing wording rules 
 - [x] In-app About & privacy screen: AGPL §5(d) notices, third-party notices, trademark notice, privacy disclosure.
 - [x] Source published at https://github.com/regulad/RosellaView (`SOURCE_URL` in `app/src/About.tsx`); the UxPlay fork is at https://github.com/regulad/UxPlay (branch `rosella`). Push before each release, so the shipped commit is public.
 - [x] Privacy policy hosted at https://regulad.github.io/RosellaView/ (GitHub Pages, branch `gh-pages`, `index.md`). It's a copy of `docs/PRIVACY.md`: update both together. Enter the URL in the portal.
-- [ ] Release build, by tag (`.github/workflows/release.yml`). Releases are identified by the manifest's `build-number` alone, the only number the Appstore uses:
-  1. Increase `build-number` in `app/manifest.toml`, and set `version` there and in `app/package.json` to `<build>.0.0` (the version name the Appstore shows; `scripts/build.sh` refuses a mismatch). Builds 1-3 had 0.x version names.
+- [ ] Release build, by tag (`.github/workflows/release.yml`). Releases are identified by the build number alone, the only number the Appstore uses. It's the manifest's `version`, a plain integer; `scripts/build.sh` passes it to the packager as `--build-number`, and stamps `rosellaview@<build>` for Sentry:
+  1. Increase `version` in `app/manifest.toml`, and the ad-hoc default in `app/src/buildInfo.ts` (`rosellaview@<build>+dev`). Builds 1-3 had a separate `build-number` and 0.x version names.
   - Production builds need `app/assets/raw/AppstoreAuthenticationKey.pem`, the app's public key (developer console: Upload Your App File > Additional information > View public key). Without it the purchase screen never opens: purchase() returns code 4. That failed build 3's review.
   2. Commit and push, then tag the build number: `git tag 4 && git push origin 4`.
-  3. CI checks that the tag equals `build-number`, runs the checks and builds with the pinned SDK (`VEGA_SDK_VERSION`). Source maps and debug files go to Sentry (secret `SENTRY_AUTH_TOKEN`, an organization token) as release `rosellaview@<build>`, and the `.vpkg` to the GitHub Release for the tag.
+  3. CI checks that the tag equals the manifest's `version`, runs the checks and builds with the pinned SDK (`VEGA_SDK_VERSION`). Source maps and debug files go to Sentry (secret `SENTRY_AUTH_TOKEN`, an organization token) as release `rosellaview@<build>`, and the `.vpkg` to the GitHub Release for the tag.
   4. Upload `rosellaview_armv7.vpkg` in the Developer Console by hand. It's the Fire TV Stick build, and Amazon's build docs name `armv7-release/*_armv7.vpkg` as the one to submit.
 
 ### Automating the upload: waiting on Amazon

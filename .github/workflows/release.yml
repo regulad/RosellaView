@@ -1,4 +1,4 @@
-# On a build-number tag (3): the checks, then a production build with the
+# On a build-number tag (4): the checks, then a production build with the
 # pinned Vega SDK. The .vpkg files go to a GitHub Release, and the source maps
 # and native debug files to Sentry. Uploading to the Appstore stays manual:
 # its submission API doesn't take Vega packages yet.
@@ -15,7 +15,7 @@ name: Release
 
 on:
   push:
-    # The manifest's build-number, the only release identifier (Appstore).
+    # The build number (the manifest's version), the only release identifier.
     tags: ['[0-9]*']
   workflow_dispatch:
 
@@ -51,8 +51,8 @@ jobs:
       - name: Tag matches the build number
         if: github.ref_type == 'tag'
         run: |
-          build=$(sed -n 's/^build-number *= *\([0-9][0-9]*\).*/\1/p' app/manifest.toml)
-          [ "${GITHUB_REF_NAME}" = "${build}" ] || { echo "tag ${GITHUB_REF_NAME} != build-number ${build}"; exit 1; }
+          build=$(sed -n 's/^version *= *"\([0-9][0-9]*\)".*/\1/p' app/manifest.toml)
+          [ "${GITHUB_REF_NAME}" = "${build}" ] || { echo "tag ${GITHUB_REF_NAME} != build number (version) ${build}"; exit 1; }
 
       - uses: actions/setup-node@v4
         with:

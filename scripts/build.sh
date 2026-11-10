@@ -34,16 +34,11 @@ else
   in_vega() { distrobox enter vega -- bash -lc "$1"; }
 fi
 
-# Releases are identified by the manifest's build-number alone: it's what the
-# Appstore uses, and the tag a release is built from (scripts/build.sh, CI).
-BUILD_NUMBER=$(sed -n 's/^build-number *= *\([0-9][0-9]*\).*/\1/p' "$APP/manifest.toml")
-[ -n "$BUILD_NUMBER" ] || { echo "no build-number in $APP/manifest.toml" >&2; exit 1; }
-# The version name the Appstore shows follows it: <build>.0.0, in the
-# manifest and package.json alike.
-for v in "$(sed -n 's/^version *= *"\(.*\)".*/\1/p' "$APP/manifest.toml")" \
-  "$(sed -n 's/^  "version": "\(.*\)".*/\1/p' "$APP/package.json")"; do
-  [ "$v" = "$BUILD_NUMBER.0.0" ] || { echo "version $v != $BUILD_NUMBER.0.0 (build-number)" >&2; exit 1; }
-done
+# Releases are identified by the build number alone: the manifest's version
+# (a plain integer), passed to the packager as the Appstore's build number,
+# and the tag a release is built from (CI).
+BUILD_NUMBER=$(sed -n 's/^version *= *"\([0-9][0-9]*\)".*/\1/p' "$APP/manifest.toml")
+[ -n "$BUILD_NUMBER" ] || { echo "no integer version in $APP/manifest.toml" >&2; exit 1; }
 # Production IAP verifies the Appstore's responses with the app's public key
 # (developer console: Upload Your App File > View public key). Without it,
 # purchase() fails with code 4: build 3's review.
@@ -136,7 +131,7 @@ in_vega "set -euo pipefail
   npm uninstall rosellaview-native rosellaview-surface > /dev/null 2>&1
   npm install --no-audit --no-fund file:../native/rosellaview-native-0.1.0.tgz file:../native-view/rosellaview-surface-0.1.0.tgz > /dev/null
   # -output-source-map: Hermes writes index.hermes.bundle.map next to the bytecode.
-  npx react-native build-vega --build-type Release $APP_TARGET --hermes-flags '-O,-w,-output-source-map' > /tmp/rv-app-build.log 2>&1 \
+  npx react-native build-vega --build-type Release --build-number $BUILD_NUMBER $APP_TARGET --hermes-flags '-O,-w,-output-source-map' > /tmp/rv-app-build.log 2>&1 \
     || { grep -iE 'error|FAILED' /tmp/rv-app-build.log | head -20; exit 1; }
 "
 
