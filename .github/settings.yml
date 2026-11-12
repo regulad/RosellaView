@@ -17,6 +17,7 @@ repository:
   name: 'RosellaView'
 
   description: 'Screen mirroring receiver for iPhone, iPad and Mac on Fire TV (Vega OS), based on UxPlay'
+  homepage: 'https://www.amazon.com/dp/B0HQVZR94M'
 
   default_branch: 'master'
 
