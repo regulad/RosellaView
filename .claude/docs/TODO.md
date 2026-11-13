@@ -4,8 +4,8 @@ RosellaView went live on the Amazon Appstore on 2026-11-12 (https://www.amazon.c
 
 ## 1. Appstore search (listing text: a console edit, no new build)
 
-- [ ] **Title:** `RosellaView: Screen Mirroring for iPhone, iPad & Mac` (`assets/listing/title.txt`). The Apple product names come after our own name, the order Apple's guidelines ask for.
-- [ ] **Keywords:** add `iphone ipad mac` (`assets/listing/keywords.txt`). They're referential, like the title.
+- [x] **Title:** `RosellaView: Screen Mirroring for iPhone, iPad & Mac` (`assets/listing/title.txt`; in the repo 2026-11-12, waiting for the owner to update the console). The Apple product names come after our own name, the order Apple's guidelines ask for.
+- [x] **Keywords:** add `iphone ipad mac` (`assets/listing/keywords.txt`). They're referential, like the title.
 - [ ] **`airplay` in keywords:** first check whether searching "airplay" on a Vega device already finds RosellaView. The short description says "Receive AirPlay screen mirroring", and the description may already be searchable. Add the keyword only if it doesn't, and keep AirPlay out of the title.
 - [ ] Keep the Apple trademark notice in the description whenever the listing changes.
 - [ ] Ask for a rating: one unobtrusive prompt after a few successful sessions. This is new UI, so it needs the owner's go-ahead (AGENTS.md: UI as small as possible).

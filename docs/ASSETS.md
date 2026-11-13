@@ -59,11 +59,11 @@ Limits are in characters (an emoji counts as one). Files are UTF-8 with no trail
 
 | File | Limit | Notes |
 |---|---|---|
-| `listing/title.txt` | 200 | `RosellaView`. No "AirPlay", no "Vega", no "Fire TV". |
+| `listing/title.txt` | 200 | `RosellaView: Screen Mirroring for iPhone, iPad & Mac`. Apple's product names appear only after our name, as a compatibility statement ("App name for iPhone", Apple's App Store marketing guidelines), and only for products it works with. No "AirPlay" (a licensed program we aren't part of), no "Vega", no "Fire TV". |
 | `listing/short-description.txt` | 1,200 | Shown first; starts with "Receive AirPlay screen mirroring from iPhone, iPad and Mac." This is the one place "AirPlay" appears, with the non-affiliation and trademark lines right after it. |
 | `listing/long-description.txt` | 4,000 | How to use it (same Wi-Fi network; Control Center → Screen Mirroring), what works and what may not (from `docs/COMPATIBILITY.md`), the watermark and its one-time purchase, privacy in one sentence with the policy URL, and the UxPlay/source line. No second "AirPlay": say "screen mirroring". |
 | `listing/features.txt` | 10 lines | One feature per line, short (the console shows them as bullets). No "AirPlay". |
-| `listing/keywords.txt` | Space-delimited | Search terms describing the function. No third-party trademarks ("AirPlay", "Apple", "iPhone", competitors' names): Amazon's IP policy, and the norm Apple's App Store spells out. |
+| `listing/keywords.txt` | Space-delimited | Search terms describing the function, plus the devices it works with (`iphone ipad mac`, referential like the title; since 2026-11-12). No "Apple", no competitors' names. "AirPlay" only if a search for it doesn't already find RosellaView through the description (`.claude/docs/TODO.md`). |
 
 ## In-app items (`iap/in-app-items.csv`)
 
