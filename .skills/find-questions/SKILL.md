@@ -14,7 +14,7 @@ RosellaView is the AirPlay receiver for Vega OS (https://www.amazon.com/dp/B0HQV
 - The asker has a **Vega** device: the Fire TV Stick 4K Select, the Fire TV Stick HD (2nd gen, 2026), the Fire TV Stick 4K (3rd gen), or "new" sticks where AirScreen is "not compatible", "not showing" or missing. Fire OS devices (4K Max, Cube, older sticks) already have AirScreen, so skip them.
 - They want to mirror from an **iPhone, iPad or Mac**. Android phones aren't supported: skip them.
 - **It's still open:** not locked or archived. Reddit archives threads after about 6 months. A recent thread or a high view count beats an old one. A wrong answer ("install AirScreen") or an Amazon staff answer that doesn't fit makes it a better target.
-- **It hasn't been answered already.** Check `.claude/scratch/outreach/answered.md` (URLs the owner has posted to). Never suggest a second answer in the same thread.
+- **It hasn't been answered already.** Check `.claude/outreach/answered.md` (URLs the owner has posted to). Never suggest a second answer in the same thread.
 
 ## 2. Where to look, and what's reachable (as of 2026-11-12)
 
@@ -43,7 +43,7 @@ Bing and DuckDuckGo may show "are you human" checks. Use the search tool and not
 
 ## 4. Output
 
-Write or refresh `.claude/scratch/outreach/questions.md` (gitignored). Older drafts are in the same folder: `reddit.md`, `amazon-qa.md` and `show-hn.md`.
+Write or refresh `.claude/outreach/questions.md`. Older drafts are in the same folder: `reddit.md`, `amazon-qa.md` and `show-hn.md`.
 
 1. **A table of targets, best first:**
 
@@ -54,4 +54,4 @@ Write or refresh `.claude/scratch/outreach/questions.md` (gitignored). Older dra
 2. **A draft per target,** under a heading with its URL, following the rules in §3.
 3. **What you couldn't reach,** and the manual searches the owner should run. List URLs ready to click.
 
-Finish by telling the owner the two or three best targets and why. Remind them to add each URL they post to to `.claude/scratch/outreach/answered.md`.
+Finish by telling the owner the two or three best targets and why. Remind them to add each URL they post to to `.claude/outreach/answered.md`.
