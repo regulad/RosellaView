@@ -27,7 +27,7 @@ RosellaView sends no user fields (`dataCollection: {userInfo: false}` in `app/sr
 | Sender's OS | `receiver client_details` carries `os_name` and `os_version` (e.g. `iPhone OS`, `18.7.8`). |
 | Time connected | Playback metrics arrive every 5 s while connected: the number of `av.delay` samples × 5 s. Samples with `video.fps` above 0 give the time with video. |
 | Video quality | `video.fps`, `video.fps_shown`, `video.dropped`, `video.native.errors`, `audio.concealed`. |
-| Purchases | `purchase -> code <n>`: 0 is probably SUCCESSFUL (the Appstore console's sales report confirms it); 4 is a failure. `unlocked=true/false` after launch shows the entitlement. |
+| Purchases | `purchase -> code <n>`, a `PurchaseResponseCode` (`dist/types/IAPTypes.d.ts` in `@amazon-devices/keplerscript-appstore-iap-lib` 2.13.0): 0 SUCCESSFUL, 1 ALREADY_PURCHASED, 2 INVALID_SKU, 3 NOT_SUPPORTED, 4 FAILED. FAILED includes the customer pressing Back on the payment screen, and nothing tells the two apart (Amazon's IAP docs; an open Amazon developer forum request). A missing Appstore public key also gives 4 (SUBMISSION.md). `unlocked=true/false` after launch shows the entitlement. |
 | Settings | `compatibility mode on/off`, `identity reset -> true`. |
 | A clean exit | `receiver stopped`, from `Receiver.stop()` on unmount. If logs and metrics stop in the middle of a connection without it, the launch was cut short. Native crashes (SIGABRT) from this device do reach Sentry on the next launch, so if none arrives, the process was most likely killed (SIGKILL) rather than crashed. |
 | Back in the foreground | Each return to the foreground logs another `unlocked=…` line in the same trace. A fresh `start` instead means the old process was gone. |
