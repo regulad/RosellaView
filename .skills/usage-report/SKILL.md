@@ -13,6 +13,8 @@ RosellaView sends no user fields (`dataCollection: {userInfo: false}` in `app/sr
 
 **Tools:** the Sentry MCP's `search_logs`, `search_metrics`, `search_errors` and `find_releases`. Pass Sentry search syntax in `query` with explicit `fields` and `sort`. A natural-language query is sometimes used literally and returns nothing. Results stop at 100 rows, so narrow by release or period when a query hits that.
 
+**Event attributes:** each `receiver <event>` log carries that event's fields as attributes. String fields work by name (`os_version`, `codec`, `sender_sps`, `format`). Numbers and booleans are rejected as "Unknown attribute" unless typed: `tags[ct,number]`, `tags[using_screen,boolean]`, `tags[reset_type,number]`. `native_status`'s text is `tags[message,string]`; plain `message` is the log line itself.
+
 ## 1. Signals
 
 | What | How to tell |
@@ -21,12 +23,14 @@ RosellaView sends no user fields (`dataCollection: {userInfo: false}` in `app/sr
 | A new install | `libairplay: *** A new Public Key has been created and stored in /data/rosellaview/pairing.key`, on the first launch after an install. The About screen's identity reset logs it again (`identity reset -> true` in the same trace), so count traces, not lines. A reinstall counts as a new install. |
 | A returning launch | A trace with `start` but no new-key line. Nothing says which install it belongs to. With few users, timing (a relaunch minutes later) is the only hint. |
 | A phone connecting | `receiver conn_init`, then `av delay for <model>: <n>ms`. Logs and metrics during a connection carry `sender.model` (e.g. `iPhone14,5`) and `sender.user_agent` (`AirPlay/<version>`). |
-| Video starting | `receiver first_video_frame` and `receiver mirror_video_running`. A connection with `audio_init` but neither of those, and `video.fps` at 0, didn't show video. |
+| Mirroring or audio only | `libairplay: raop_rtp_mirror starting mirroring` means the phone asked for Screen Mirroring; `receiver first_video_frame` and `receiver mirror_video_running` follow. If there's only `libairplay: raop_rtp starting audio`, check `receiver audio_format`: `using_screen` false (with `is_media` true) is AirPlay audio from an app or the audio picker, and the TV shows "Playing audio from…". That's working as designed, not a failed mirror. Only a mirroring request with no first frame is a failure. |
+| Sender's OS | `receiver client_details` carries `os_name` and `os_version` (e.g. `iPhone OS`, `18.7.8`). |
 | Time connected | Playback metrics arrive every 5 s while connected: the number of `av.delay` samples × 5 s. Samples with `video.fps` above 0 give the time with video. |
 | Video quality | `video.fps`, `video.fps_shown`, `video.dropped`, `video.native.errors`, `audio.concealed`. |
 | Purchases | `purchase -> code <n>`: 0 is probably SUCCESSFUL (the Appstore console's sales report confirms it); 4 is a failure. `unlocked=true/false` after launch shows the entitlement. |
 | Settings | `compatibility mode on/off`, `identity reset -> true`. |
-| A clean exit | `receiver stopped`, from `Receiver.stop()` on unmount. If logs and metrics stop in the middle of a connection without it, and no error follows, the launch was probably killed. Investigate it. |
+| A clean exit | `receiver stopped`, from `Receiver.stop()` on unmount. If logs and metrics stop in the middle of a connection without it, the launch was cut short. Native crashes (SIGABRT) from this device do reach Sentry on the next launch, so if none arrives, the process was most likely killed (SIGKILL) rather than crashed. |
+| Back in the foreground | Each return to the foreground logs another `unlocked=…` line in the same trace. A fresh `start` instead means the old process was gone. |
 | Errors and crashes | `search_errors` with `environment:production`. Native crashes are sent on the next launch. Only error events carry the Fire TV model and OS version; logs and metrics don't. |
 
 ## 2. Queries
@@ -45,7 +49,7 @@ All are `search_logs` unless marked; add `period` (`14d`, `30d`).
 
 1. **One row per install:** first seen (UTC), launches, and what happened (sender model and AirPlay version, whether video showed and for how long, purchases, settings changed, clean exit or not).
 2. **Totals since go-live:** installs, launches, connections, time connected and time with video, purchases, errors.
-3. **What to look into,** each with its trace ID: connections that never showed video, launches that ended mid-connection, errors, AirPlay versions the owner hasn't tested.
+3. **What to look into,** each with its trace ID: mirroring requests that never showed video, launches that ended mid-connection, errors, AirPlay versions the owner hasn't tested. Read a launch's full trace (including the `libairplay:` lines and the `audio_format` attributes) before calling it a failure.
 4. **One line of caveats:** every count is a minimum, because launches without network access aren't sent; reinstalls count twice; the owner's own store installs are included unless they say which ones are theirs.
 
 Link the Sentry Explore URL that each query returns, so the owner can open it.
