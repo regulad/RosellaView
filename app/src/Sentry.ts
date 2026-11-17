@@ -67,11 +67,14 @@ function hermesFrame(line: string): StackFrame | undefined {
   }
   const base = m[2].split('/').pop() ?? m[2];
   const inApp = APP_BUNDLES.includes(base);
+  const lineno = Number(m[3]);
   return {
     function: m[1] || '?',
     filename: inApp ? 'app:///index.bundle' : `app:///${base}`,
-    lineno: Number(m[3]),
-    colno: Number(m[4]),
+    lineno,
+    // A bytecode frame (always line 1) gives a 0-based bytecode offset, and
+    // Sentry's columns are 1-based: as @sentry/react-native's RewriteFrames.
+    colno: Number(m[4]) + (lineno === 1 ? 1 : 0),
     in_app: inApp,
   };
 }
