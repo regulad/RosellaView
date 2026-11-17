@@ -21,7 +21,7 @@ interface NativeReceiver {
   shiftAudio(ms: number): boolean;
   requestKeyframe(): boolean;
   setSentryEnvelopeListener(listener: ((kind: number, envelope: ArrayBuffer) => void) | null): boolean;
-  sentryInit(dsn: string, release: string, dist: string, environment: string): boolean;
+  sentryInit(dsn: string, release: string, dist: string, environment: string, deviceModel: string): boolean;
   setWatermark(on: boolean): boolean;
   getStats(): string;
   setVideoLatency(ms: number): boolean;
@@ -89,8 +89,9 @@ export const Receiver = {
   onSentryEnvelope(listener: ((envelope: ArrayBuffer) => void) | null): void {
     native.setSentryEnvelopeListener(listener ? (_kind, envelope) => listener(envelope) : null);
   },
-  sentryInit: (dsn: string, release: string, dist: string, environment: string): boolean =>
-    native.sentryInit(dsn, release, dist, environment),
+  /** Starts native crash reporting; deviceModel is the Fire TV's, for the reports' device context. */
+  sentryInit: (dsn: string, release: string, dist: string, environment: string, deviceModel: string): boolean =>
+    native.sentryInit(dsn, release, dist, environment, deviceModel),
   /** Audio carries a spoken "Preview." every 5 s while on (the default). */
   setWatermark: (on: boolean): boolean => native.setWatermark(on),
   /** Native video: how long after capture frames are shown (ms). */

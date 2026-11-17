@@ -235,14 +235,16 @@ static napi_value js_set_sentry_listener(napi_env env, napi_callback_info info) 
     return make_bool(env, ok);
 }
 
-/* sentryInit(dsn, release, dist, environment) → true once native crash handling runs */
+/* sentryInit(dsn, release, dist, environment, deviceModel) → true once native crash handling runs */
 static napi_value js_sentry_init(napi_env env, napi_callback_info info) {
     char dsn[MAX_STRING_ARG], release[MAX_STRING_ARG], dist[MAX_STRING_ARG], environment[MAX_STRING_ARG];
+    char device_model[MAX_STRING_ARG];
     if (!string_arg_at(env, info, 0, dsn, sizeof dsn) || !string_arg_at(env, info, 1, release, sizeof release) ||
         !string_arg_at(env, info, 2, dist, sizeof dist) ||
-        !string_arg_at(env, info, 3, environment, sizeof environment))
+        !string_arg_at(env, info, 3, environment, sizeof environment) ||
+        !string_arg_at(env, info, 4, device_model, sizeof device_model))
         return make_bool(env, 0);
-    return make_bool(env, rv_sentry_init(dsn, release, dist, environment) == 0);
+    return make_bool(env, rv_sentry_init(dsn, release, dist, environment, device_model) == 0);
 }
 
 /* resetIdentity(): a new name tag and pairing key; restarts the receiver */

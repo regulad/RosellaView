@@ -31,6 +31,7 @@ import {
   linkedErrorsIntegration,
   makeDsn,
   resolvedSyncPromise,
+  setAttributes,
   setContext,
   setTag,
   startSession,
@@ -175,6 +176,8 @@ export function initSentry(): void {
     screen_width_pixels: window.width,
     screen_height_pixels: window.height,
   });
+  // Logs and metrics carry attributes rather than contexts.
+  setAttributes({'device.model': TV_MODEL});
   const constants: Record<string, unknown> = {...(Platform.constants as Record<string, unknown>)};
   for (const k of PRIVATE_CONSTANTS) {
     delete constants[k];
@@ -190,7 +193,7 @@ export function initSentry(): void {
   Receiver.onSentryEnvelope((envelope) => {
     post(nativeUrl, envelope).catch(() => undefined);
   });
-  Receiver.sentryInit(DSN, BUILD.release, BUILD.dist, BUILD.environment);
+  Receiver.sentryInit(DSN, BUILD.release, BUILD.dist, BUILD.environment, TV_MODEL);
 
   startSession();
   captureSession();

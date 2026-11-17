@@ -18,8 +18,10 @@ typedef void (*rv_sentry_sink)(uint8_t *data, size_t len);
 void rv_sentry_set_sink(rv_sentry_sink sink);
 
 /* Starts crash handling (inproc backend) with its database in /data. Idempotent.
- * Returns 0 on success. */
-int rv_sentry_init(const char *dsn, const char *release, const char *dist, const char *environment);
+ * device_model, the Fire TV's, goes into the reports' device context. Returns 0
+ * on success. */
+int rv_sentry_init(const char *dsn, const char *release, const char *dist, const char *environment,
+                   const char *device_model);
 
 /* Scope for native crash reports; JS events get the same from the JS SDK. */
 void rv_sentry_breadcrumb(const char *category, const char *message);

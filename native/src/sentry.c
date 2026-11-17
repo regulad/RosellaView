@@ -131,8 +131,10 @@ static void send_envelope(sentry_envelope_t *envelope, void *state) {
     sentry_envelope_free(envelope);
 }
 
-int rv_sentry_init(const char *dsn, const char *release, const char *dist, const char *environment) {
+int rv_sentry_init(const char *dsn, const char *release, const char *dist, const char *environment,
+                   const char *device_model) {
     sentry_options_t *opts;
+    const char *device[] = {"family", "Fire TV", "model", device_model};
     if (g_started) return 0;
     mkdir("/data/rosellaview", 0700);
     opts = sentry_options_new();
@@ -149,6 +151,8 @@ int rv_sentry_init(const char *dsn, const char *release, const char *dist, const
     sentry_options_set_on_crash(opts, on_crash, NULL);
     if (sentry_init(opts) != 0) return -1;
     g_started = 1;
+    /* As the JS SDK's device context (app/src/Sentry.ts). */
+    rv_sentry_set_context("device", device, 2);
     return 0;
 }
 
