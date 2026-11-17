@@ -12,6 +12,7 @@
 import {AudioPlayer, MediaSource, VideoPlayer} from '@amazon-devices/react-native-w3cmedia';
 import {Receiver} from 'rosellaview-native';
 import {countEvent, warn} from './Telemetry';
+import type {PlayerMetrics} from './Telemetry';
 
 // The decoder reconfigures from each init segment's avcC, so a generic
 // High-profile type is enough to create the SourceBuffer.
@@ -273,15 +274,7 @@ export class MirrorPlayer {
     }
   }
 
-  metrics(): {
-    appended: number;
-    aheadMs: number;
-    behindMs: number;
-    queue: number;
-    readyState: number;
-    totalFrames: number;
-    droppedFrames: number;
-  } | null {
+  metrics(): PlayerMetrics | null {
     const vp = this.player;
     if (!vp) {
       return null;
@@ -290,11 +283,9 @@ export class MirrorPlayer {
     const end = b && b.length ? b.end(b.length - 1) : vp.currentTime;
     const start = b && b.length ? b.start(0) : vp.currentTime;
     return {
-      appended: this.appended,
       aheadMs: Math.round((end - vp.currentTime) * 1000),
       behindMs: Math.round((vp.currentTime - start) * 1000),
       queue: this.queue.length,
-      readyState: vp.readyState,
       ...this.playbackQuality(),
     };
   }

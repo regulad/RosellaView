@@ -155,7 +155,6 @@ export function receiverEvent(e: ReceiverEvent): void {
       setTag('sender.os', String(e.os_name));
       setTag('sender.os_version', os);
       setTag('sender.os_build', String(e.os_build_version));
-      setTag('sender.airplay_version', String(e.source_version));
       break;
     }
     case 'video_init': {
@@ -210,12 +209,11 @@ function flatten(data: Record<string, unknown>): Record<string, string | number 
   return out;
 }
 
+/** An MSE player's buffer and frame counts (MirrorPlayer). */
 export type PlayerMetrics = {
-  appended: number;
   aheadMs: number;
   behindMs: number;
   queue: number;
-  readyState: number;
   totalFrames: number;
   droppedFrames: number;
 };
@@ -229,7 +227,11 @@ let prevFrames: {t: number; total: number; dropped: number} | null = null;
 let previous: {t: number; s: Record<string, number>} | null = null;
 let prevCpu: {t: number; ms: number} | null = null;
 
-/** Called every few seconds while a sender is connected. */
+/**
+ * Called every few seconds while a sender is connected. `video` is the MSE
+ * video player's (Compatibility Mode); with native video it's null and
+ * `native` has the pipeline's state.
+ */
 export function receiverStats(
   s: Record<string, unknown>,
   video: PlayerMetrics | null,
@@ -268,9 +270,6 @@ export function receiverStats(
     gauge('process.rss', mb('rss_kb'), 'megabyte');
     gauge('process.rss_peak', mb('rss_peak_kb'), 'megabyte');
   }
-  if (has('mem_available_kb')) {
-    gauge('system.mem_available', mb('mem_available_kb'), 'megabyte');
-  }
   if (has('mem_free_kb')) {
     gauge('system.mem_free', mb('mem_free_kb'), 'megabyte');
   }
@@ -288,9 +287,6 @@ export function receiverStats(
   if (has('cpu_freq_khz')) {
     gauge('cpu.freq', cur.cpu_freq_khz / 1000, 'megahertz');
   }
-  if (has('cpu_freq_max_khz')) {
-    gauge('cpu.freq_max', cur.cpu_freq_max_khz / 1000, 'megahertz');
-  }
   if (has('threads')) {
     gauge('process.threads', cur.threads);
   }
@@ -299,9 +295,6 @@ export function receiverStats(
   }
   if (has('vm_size_kb')) {
     gauge('process.vm_size', mb('vm_size_kb'), 'megabyte');
-  }
-  if (has('vm_locked_kb')) {
-    gauge('process.vm_locked', mb('vm_locked_kb'), 'megabyte');
   }
   if (has('vm_swap_kb')) {
     gauge('process.vm_swap', mb('vm_swap_kb'), 'megabyte');
@@ -312,20 +305,24 @@ export function receiverStats(
     metrics.gauge('video.queue', video.queue, {attributes});
     // Already-played video still buffered; MirrorPlayer trims it to ~10-15 s.
     metrics.gauge('video.buffer_behind', video.behindMs, {unit: 'millisecond', attributes});
-    // What the TV actually presents, next to what the sender sends (video.fps).
-    if (video.totalFrames >= 0) {
-      const p = prevFrames;
-      if (p && now > p.t && video.totalFrames >= p.total) {
-        const dt = (now - p.t) / 1000;
-        metrics.gauge('video.fps_shown', (video.totalFrames - p.total - (video.droppedFrames - p.dropped)) / dt, {
-          attributes,
-        });
-        metrics.count('video.dropped', Math.max(0, video.droppedFrames - p.dropped), {attributes});
-      }
-      prevFrames = {t: now, total: video.totalFrames, dropped: video.droppedFrames};
-    } else {
-      prevFrames = null;
+  }
+  // What the TV actually presents, next to what the sender sends (video.fps):
+  // the MSE player's frame counts, or the native pipeline's.
+  const frames = video
+    ? {total: video.totalFrames, dropped: video.droppedFrames}
+    : native?.attached
+      ? {total: native.shown + native.skipped, dropped: native.skipped}
+      : null;
+  if (frames && frames.total >= 0) {
+    const p = prevFrames;
+    if (p && now > p.t && frames.total >= p.total) {
+      const dt = (now - p.t) / 1000;
+      metrics.gauge('video.fps_shown', (frames.total - p.total - (frames.dropped - p.dropped)) / dt, {attributes});
+      metrics.count('video.dropped', Math.max(0, frames.dropped - p.dropped), {attributes});
     }
+    prevFrames = {t: now, total: frames.total, dropped: frames.dropped};
+  } else {
+    prevFrames = null;
   }
   // The native pipeline (hardware decode, our own rendering): its latency,
   // de-tile + upload cost, and pictures shown late or that failed to decode.

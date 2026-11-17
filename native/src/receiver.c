@@ -19,7 +19,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <dirent.h>
-#include <sys/mman.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/sysinfo.h>
@@ -252,6 +251,15 @@ static void emit_str(const char *type, const char *key, const char *value) {
 
 #define USER_AGENT_PREFIX "Client identified as User-Agent: "
 
+/* Library lines that say nothing: each keyframe request being sent, and the
+ * sender's "200 OK" to it (the event channel carries nothing else from us).
+ * They come every 10 s in Compatibility Mode (DECISIONS.md D7) and at every
+ * native decoder start. */
+static const char *const QUIET_LOGS[] = {
+    "raop_events: forceKeyFrame sent",
+    "raop_events: received: RTSP/1.0 200 OK",
+};
+
 static void cb_log(void *cls, int level, const char *msg) {
     char *m;
     (void)cls;
@@ -260,6 +268,9 @@ static void cb_log(void *cls, int level, const char *msg) {
         const char *ua = msg + strlen(USER_AGENT_PREFIX);
         rv_sentry_set_tag("sender.user_agent", ua);
         emit_str("client_user_agent", "user_agent", ua);
+    }
+    for (size_t i = 0; i < sizeof QUIET_LOGS / sizeof QUIET_LOGS[0]; i++) {
+        if (strncmp(msg, QUIET_LOGS[i], strlen(QUIET_LOGS[i])) == 0) return;
     }
     m = json_escape(msg);
     if (m) redact_addresses(m);
@@ -780,37 +791,6 @@ static void set_features(dnssd_t *d) {
     for (int i = 32; i < 62; i++) dnssd_set_airplay_features(d, i, 0);
 }
 
-/* Whether this process may lock memory into RAM (mlock/mlockall): reports the
- * RLIMIT_MEMLOCK limits and whether locking one page works. Locks nothing. */
-static void report_memlock(void) {
-    struct rlimit rl;
-    long page = sysconf(_SC_PAGESIZE);
-    void *probe = NULL;
-    int rc = -1, err = 0;
-    char cur[32], max[32];
-    if (getrlimit(RLIMIT_MEMLOCK, &rl) != 0) {
-        emit("{\"type\":\"memlock\",\"error\":%d}", errno);
-        return;
-    }
-    if (rl.rlim_cur == RLIM_INFINITY)
-        snprintf(cur, sizeof cur, "\"unlimited\"");
-    else
-        snprintf(cur, sizeof cur, "%llu", (unsigned long long)rl.rlim_cur);
-    if (rl.rlim_max == RLIM_INFINITY)
-        snprintf(max, sizeof max, "\"unlimited\"");
-    else
-        snprintf(max, sizeof max, "%llu", (unsigned long long)rl.rlim_max);
-    if (posix_memalign(&probe, (size_t)page, (size_t)page) == 0) {
-        rc = mlock(probe, (size_t)page);
-        err = rc ? errno : 0;
-        if (rc == 0) munlock(probe, (size_t)page);
-        free(probe);
-    }
-    emit("{\"type\":\"memlock\",\"rlimit_cur\":%s,\"rlimit_max\":%s,\"page_size\":%ld,"
-         "\"mlock_page\":%s,\"mlock_errno\":%d}",
-         cur, max, page, rc == 0 ? "true" : "false", err);
-}
-
 static char g_base_name[64] = "RosellaView"; /* the last receiver_start's */
 
 int receiver_start(const char *base_name) {
@@ -939,7 +919,6 @@ int receiver_start(const char *base_name) {
         emit_private("{\"type\":\"started\",\"name\":\"%s\",\"port\":%u,\"deviceid\":\"%s\",\"features\":\"0x%" PRIx64
                      "\"}",
                      n, port, device_id, dnssd_get_airplay_features(g_dnssd));
-        report_memlock();
         free(n);
     }
     pthread_mutex_unlock(&g_lock);
@@ -1068,19 +1047,17 @@ static void system_stats(char *out, size_t len) {
     struct sysinfo si;
     struct rusage ru;
     double unit;
-    long freq = -1, freq_max = -1, fds = -1;
+    long freq = -1, fds = -1;
     DIR *d;
 
     out[0] = '\0';
     if (sysinfo(&si) == 0) {
         unit = (double)si.mem_unit / 1024.0;
         put_num(&p, &left, "mem_free_kb", (double)(si.freeram + si.bufferram) * unit);
-        put_num(&p, &left, "mem_total_kb", (double)si.totalram * unit);
         put_num(&p, &left, "swap_total_kb", (double)si.totalswap * unit);
         put_num(&p, &left, "swap_free_kb", (double)si.freeswap * unit);
         put_num(&p, &left, "load1", si.loads[0] / 65536.0);
     }
-    put_num(&p, &left, "mem_available_kb", (double)proc_kb("/proc/meminfo", "MemAvailable"));
     if (getrusage(RUSAGE_SELF, &ru) == 0) {
         put_num(&p, &left, "proc_cpu_ms",
                 ru.ru_utime.tv_sec * 1e3 + ru.ru_utime.tv_usec / 1e3 + ru.ru_stime.tv_sec * 1e3 +
@@ -1089,16 +1066,11 @@ static void system_stats(char *out, size_t len) {
     put_num(&p, &left, "ncpu", (double)sysconf(_SC_NPROCESSORS_ONLN));
     proc_line("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq", line, sizeof line);
     if (sscanf(line, "%ld", &freq) != 1) freq = -1;
-    proc_line("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq", line, sizeof line);
-    if (sscanf(line, "%ld", &freq_max) != 1) freq_max = -1;
     put_num(&p, &left, "cpu_freq_khz", (double)freq);
-    put_num(&p, &left, "cpu_freq_max_khz", (double)freq_max);
     put_num(&p, &left, "threads", (double)proc_kb("/proc/self/status", "Threads"));
     /* Virtual size against RSS shows whether buffers are reserved up front and
-     * faulted in, or allocated as they grow; VmLck and VmSwap what's pinned
-     * and what's been swapped out. */
+     * faulted in, or allocated as they grow; VmSwap what's been swapped out. */
     put_num(&p, &left, "vm_size_kb", (double)proc_kb("/proc/self/status", "VmSize"));
-    put_num(&p, &left, "vm_locked_kb", (double)proc_kb("/proc/self/status", "VmLck"));
     put_num(&p, &left, "vm_swap_kb", (double)proc_kb("/proc/self/status", "VmSwap"));
     if ((d = opendir("/proc/self/fd")) != NULL) {
         fds = -2; /* . and .. */

@@ -11,7 +11,6 @@
  */
 import {Receiver} from 'rosellaview-native';
 import type {NativeVideoState} from 'rosellaview-native';
-import type {PlayerMetrics} from './Telemetry';
 
 // Capture-to-screen (and -sound) latency: enough for frames over a decent
 // network to arrive in time. Bad LAN/Wi-Fi Mode (About) trades latency for
@@ -59,19 +58,5 @@ export class NativeVideo {
   playingSenderMs(): number {
     const s = this.state();
     return s.attached && s.sender_ms > 0 ? s.sender_ms : NaN;
-  }
-
-  /** In MirrorPlayer's shape, for the shared video gauges. */
-  metrics(): PlayerMetrics {
-    const s = this.state();
-    return {
-      appended: s.decoded,
-      aheadMs: this.latency,
-      behindMs: 0,
-      queue: s.queued,
-      readyState: s.attached ? 4 : 0,
-      totalFrames: s.shown + s.skipped,
-      droppedFrames: s.skipped,
-    };
   }
 }

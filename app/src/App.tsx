@@ -209,7 +209,7 @@ export const App = () => {
         const nv = nativeVideo.current;
         receiverStats(
           s,
-          nv ? nv.metrics() : (player.current?.metrics() ?? null),
+          nv ? null : (player.current?.metrics() ?? null),
           audio.current?.metrics() ?? null,
           avSync,
           nv ? nv.state() : null,
