@@ -38,6 +38,7 @@ import {
   withScope,
 } from '@sentry/core';
 import type {ClientOptions, Event, EventHint, ParameterizedString, SeverityLevel, StackFrame} from '@sentry/core';
+import {getModel} from '@amazon-devices/react-native-device-info';
 import {Dimensions, Platform} from 'react-native';
 import {Receiver} from 'rosellaview-native';
 import {BUILD} from './buildInfo';
@@ -46,8 +47,24 @@ const UPLOAD_TIMEOUT_MS = 15000;
 
 const DSN = 'https://177b93c7aaee9b05f6c07f68d6a03393@o4506961510596608.ingest.us.sentry.io/4512389338628096';
 
+/**
+ * The Fire TV's model, from the OS's device-info service. Vega's
+ * Platform.constants has no Model (only isTesting, keplerOSVariant, uiMode).
+ */
+function tvModel(): string {
+  try {
+    const model: unknown = getModel();
+    if (typeof model === 'string' && model) {
+      return model;
+    }
+  } catch {
+    // The service isn't available: report it as unknown.
+  }
+  return 'unknown';
+}
+
 /** The Fire TV's model, as reported with every event and streaming session. */
-export const TV_MODEL = String((Platform.constants as Record<string, unknown>)?.Model ?? 'unknown');
+export const TV_MODEL = tvModel();
 
 // Platform constants that identify this TV or the developer's machine (the
 // packager's host); left out of the reports, as PRIVACY.md promises.

@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@amazon-devices/keplerscript-appstore-iap-lib": "~2.13",
+    "@amazon-devices/react-native-device-info": "~2.1",
     "@amazon-devices/react-native-kepler": "~4.0.0",
     "@amazon-devices/react-native-w3cmedia": "~2.3.2",
     "@sentry/core": "^11.8.0",
