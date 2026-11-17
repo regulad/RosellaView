@@ -69,6 +69,7 @@ Its uploads need `sentry-cli login`; the token needs `project:write`, `org:read`
   - receiver events as breadcrumbs and logs
   - sender details as context and tags
   - playback stats as metrics, every 5 s while connected
+  - each streaming session as a transaction (`streaming session`, op `receiver.session`), for usage: the TV's model, whether the unlock is owned, audio or mirroring, and the sender's kind, as attributes and tags. Nothing that identifies the viewer.
   - sessions, for release health
 - **Native** (`native/src/sentry.c`) uses sentry-native with the inproc backend. Crashes go into `/data/rosellaview/sentry` and are sent on the next launch, through JS (`Receiver.onSentryEnvelope`); there's no native HTTP. On armv7, an `on_crash` hook rebuilds the stack from pc, lr and a stack scan, because sentry-native's unwinder gets nothing usable there.
 - **No development hooks ship.** The crash and error test hooks were removed before submission (in git history before the About screen commit, should they be needed again). The native surface's status lines arrive as `native_status` receiver events, so they're in Sentry's logs.

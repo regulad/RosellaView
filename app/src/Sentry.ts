@@ -45,6 +45,13 @@ const UPLOAD_TIMEOUT_MS = 15000;
 
 const DSN = 'https://177b93c7aaee9b05f6c07f68d6a03393@o4506961510596608.ingest.us.sentry.io/4512389338628096';
 
+/** The Fire TV's model, as reported with every event and streaming session. */
+export const TV_MODEL = String((Platform.constants as Record<string, unknown>)?.Model ?? 'unknown');
+
+// Platform constants that identify this TV or the developer's machine (the
+// packager's host); left out of the reports, as PRIVACY.md promises.
+const PRIVATE_CONSTANTS = ['Serial', 'ServerHost'];
+
 // The app's own Hermes bundle; frames from it are symbolicated with the
 // source map that scripts/build.sh uploads as app:///index.bundle.map.
 const APP_BUNDLES = ['index.hermes.bundle', 'index.bundle'];
@@ -128,6 +135,24 @@ export function initSentry(): void {
     // Sender model and OS are set explicitly (Telemetry.ts), to tell iPhone,
     // iPad and Mac crashes apart. No user fields: nothing personal, and no IP.
     dataCollection: {userInfo: false},
+    // Tracing is only the streaming-session transactions (Telemetry.ts); this
+    // client instruments nothing else. 'static' sends each as a transaction
+    // when it ends: the default, 'stream', needs spanStreamingIntegration and
+    // without it drops every span.
+    tracesSampleRate: 1,
+    traceLifecycle: 'static',
+    // A transaction's attributes (premium, device.model…) also go out as
+    // tags, which Discover and alerts filter transactions by. Breadcrumbs
+    // stay with errors: the session's trace already has them as logs.
+    beforeSendTransaction(event) {
+      for (const [key, value] of Object.entries(event.contexts?.trace?.data ?? {})) {
+        if (!key.startsWith('sentry.') && value !== undefined) {
+          event.tags = {...event.tags, [key]: String(value)};
+        }
+      }
+      delete event.breadcrumbs;
+      return event;
+    },
     attachStacktrace: true,
     maxBreadcrumbs: 200,
     stackParser,
@@ -146,11 +171,15 @@ export function initSentry(): void {
   const window = Dimensions.get('window');
   setContext('device', {
     family: 'Fire TV',
-    model: String((Platform.constants as Record<string, unknown>)?.Model ?? 'unknown'),
+    model: TV_MODEL,
     screen_width_pixels: window.width,
     screen_height_pixels: window.height,
   });
-  setContext('vega', {...(Platform.constants as Record<string, unknown>)});
+  const constants: Record<string, unknown> = {...(Platform.constants as Record<string, unknown>)};
+  for (const k of PRIVATE_CONSTANTS) {
+    delete constants[k];
+  }
+  setContext('vega', constants);
   setContext('os', {name: 'Vega OS', version: String(Platform.Version ?? '')});
   setTag('build.git', BUILD.git);
 

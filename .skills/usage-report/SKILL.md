@@ -5,7 +5,9 @@ description: Count RosellaView's users and summarize how they use it (installs, 
 
 # Usage report from Sentry
 
-RosellaView sends no user fields (`dataCollection: {userInfo: false}` in `app/src/Sentry.ts`) and no device IDs, as `docs/PRIVACY.md` promises. So Sentry's "users" columns are empty, and release health came back empty through the Sentry MCP (2026-11-15). Everything below is worked out from logs and metrics, one launch at a time. **Don't add identifiers or new instrumentation to get better numbers:** the owner decided against it, and it would need a privacy-policy change.
+RosellaView sends no user fields (`dataCollection: {userInfo: false}` in `app/src/Sentry.ts`) and no device IDs, as `docs/PRIVACY.md` promises. So Sentry's "users" columns are empty, and release health came back empty through the Sentry MCP (2026-11-15). Most of what follows is worked out from logs and metrics, one launch at a time. **Don't add identifiers to get better numbers:** the owner decided against it, and it would need a privacy-policy change.
+
+**Streaming sessions** (builds after 4): each one is a transaction named `streaming session` (op `receiver.session`), from the first sender connecting to the last one leaving or the app closing. Its attributes, also sent as tags, are `device.model` (the Fire TV), `premium` (the unlock owned), `session.kind` (`connected`, `audio` or `mirroring`), `sender.kind` (iPhone, iPad, Mac…) and `session.end` (`disconnected` or `app_closed`). Count and group them with `search_traces`, e.g. query `transaction:"streaming session"` with fields `premium, device.model, count()`, or `session.kind, avg(span.duration)`. A session whose launch the OS killed never ends, so it's missing here; the logs still show it. It shares its launch's trace ID, so `trace:<id>` finds that launch's logs.
 
 **Where:** org `regulad`, project `rosellaview`, `environment:production`. Other environments (`development`, `soak`, `soak-b`) are the owner's own testing. Production data before go-live (2026-11-12) is Amazon's review. Sentry keeps 90 days.
 

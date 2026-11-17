@@ -1,16 +1,71 @@
 /*
  * Telemetry: what RosellaView reports to Sentry (see Sentry.ts): receiver
  * events as breadcrumbs and logs, the sender's details as context and tags,
- * and playback statistics as metrics.
+ * playback statistics as metrics, and each streaming session as a
+ * transaction.
  *
  * Copyright (C) 2026 Parker Wahle
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-import {addBreadcrumb, captureMessage, logger, metrics, setContext, setTag} from '@sentry/core';
+import {addBreadcrumb, captureMessage, logger, metrics, setContext, setTag, startInactiveSpan} from '@sentry/core';
+import type {Span} from '@sentry/core';
 import type {NativeVideoState, ReceiverEvent} from 'rosellaview-native';
+import {TV_MODEL} from './Sentry';
 
 // Sender details, attached to every log and metric while a sender is connected.
 let senderAttributes: Record<string, string> = {};
+
+// Usage: each streaming session is a transaction ("streaming session",
+// op receiver.session), from the first sender connecting to the last one
+// leaving or the app closing. It carries no identifier: the TV's model,
+// whether the unlock is owned, what was streamed and from what kind of
+// device. Each is a span attribute, which Sentry.ts also sends as a tag. A
+// launch the OS kills mid-session never ends its transaction, so that
+// session isn't counted.
+type StreamKind = 'connected' | 'audio' | 'mirroring';
+let stream: {span: Span; kind: StreamKind} | null = null;
+let premium = false;
+
+function streamSet(key: string, value: string | boolean): void {
+  stream?.span.setAttribute(key, value);
+}
+
+function streamStart(): void {
+  if (stream) {
+    return;
+  }
+  stream = {
+    span: startInactiveSpan({name: 'streaming session', op: 'receiver.session', parentSpan: null}),
+    kind: 'connected',
+  };
+  streamSet('device.model', TV_MODEL);
+  streamSet('premium', premium);
+  streamSet('session.kind', 'connected');
+}
+
+// What the session streamed: 'connected' until audio or mirroring starts.
+// Mirroring outranks audio (it carries its own audio stream).
+function streamKind(kind: StreamKind): void {
+  if (stream && stream.kind !== 'mirroring') {
+    stream.kind = kind;
+    streamSet('session.kind', kind);
+  }
+}
+
+/** Whether the unlock is owned: recorded on the open session and on later ones. */
+export function setPremium(owned: boolean): void {
+  premium = owned;
+  streamSet('premium', owned);
+}
+
+/** Ends the streaming session, if one is open. */
+export function streamEnd(reason: 'disconnected' | 'app_closed'): void {
+  if (stream) {
+    streamSet('session.end', reason);
+    stream.span.end();
+    stream = null;
+  }
+}
 
 /** App-side messages: the device log (first line only, rate-limited) and Sentry logs. */
 export function log(msg: string): void {
@@ -68,14 +123,23 @@ export function receiverEvent(e: ReceiverEvent): void {
   logger.info(isLibLog ? `libairplay: ${String(e.msg)}` : `receiver ${type}`, {...senderAttributes, ...flatten(data)});
 
   switch (type) {
+    case 'conn_init':
+      streamStart();
+      break;
     case 'client_request': {
       const model = String(e.model);
       senderAttributes = {'sender.model': model, 'sender.kind': senderKind(model)};
       setContext('sender', {model, kind: senderKind(model)});
       setTag('sender.model', model);
       setTag('sender.kind', senderKind(model));
+      streamSet('sender.kind', senderKind(model));
       break;
     }
+    case 'mirror_video_running':
+      if (e.running === true) {
+        streamKind('mirroring');
+      }
+      break;
     case 'client_user_agent': {
       const ua = String(e.user_agent);
       senderAttributes['sender.user_agent'] = ua;
@@ -122,10 +186,14 @@ export function receiverEvent(e: ReceiverEvent): void {
     case 'audio_format':
       setContext('audio', {ct: e.ct, samples_per_frame: e.spf, using_screen: e.using_screen, format: e.format});
       setTag('audio.ct', String(e.ct));
+      if (e.using_screen === false) {
+        streamKind('audio');
+      }
       break;
     case 'conn_destroy':
       if ((e.connections as number) <= 0) {
         senderAttributes = {};
+        streamEnd('disconnected');
       }
       break;
     case 'error':

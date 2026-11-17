@@ -17,7 +17,7 @@ import {KeepAwake} from './KeepAwake';
 import {MirrorPlayer} from './MirrorPlayer';
 import {NativeVideo} from './NativeVideo';
 import {buyUnlock, cachedUnlocked, isUnlocked, UNLOCK_TITLE, unlockTitle} from './Purchases';
-import {log, receiverEvent, receiverStats, resetStats, warn} from './Telemetry';
+import {log, receiverEvent, receiverStats, resetStats, setPremium, streamEnd, warn} from './Telemetry';
 import {Watermark} from './Watermark';
 
 // The receiver advertises as "RosellaView <TAG>", TAG derived from the
@@ -226,6 +226,8 @@ export const App = () => {
     return () => {
       clearInterval(stats);
       clearInterval(sync);
+      // Before stop(), whose disconnects would end it as "disconnected".
+      streamEnd('app_closed');
       Receiver.stop();
       Receiver.onEvent(null);
       Receiver.onVideo(null);
@@ -265,6 +267,9 @@ export const App = () => {
     });
     return () => sub.remove();
   }, []);
+
+  // Streaming sessions record whether the unlock is owned (Telemetry.ts).
+  useEffect(() => setPremium(unlocked), [unlocked]);
 
   useEffect(() => {
     unlockTitle(log)
