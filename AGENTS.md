@@ -61,6 +61,7 @@ Use `scripts/build.sh [environment] [--install]` from the host. It:
 - stamps the release (`rosellaview@<version>+<git sha>`, with a unique suffix for uncommitted builds) into `app/src/buildInfo.ts`, restoring the committed default afterwards
 - builds the native module and the app (Hermes with `-output-source-map`)
 - composes the Hermes and Metro source maps and uploads them, with the native debug files, to Sentry (org `regulad`, project `rosellaview`)
+- for a build-number release (CI's tag builds, `rosellaview@6`), attaches the commits since the previous build's tag. A `Fixes ROSELLAVIEW-…` line in one of them then resolves that issue in that release; without the commits, Sentry only marks it as referenced.
 
 Its uploads need `sentry-cli login`; the token needs `project:write`, `org:read` and `project:releases` scopes. A plain `npm run build` works, but its reports aren't symbolicated.
 

@@ -154,6 +154,18 @@ $SENTRY_CLI releases --org "$ORG" --project "$PROJECT" new "$RELEASE"
 $SENTRY_CLI sourcemaps upload --org "$ORG" --project "$PROJECT" --release "$RELEASE" --dist "$DIST" \
   --url-prefix app:/// --no-rewrite "$OUT"
 $SENTRY_CLI debug-files upload --org "$ORG" --project "$PROJECT" "$APP"/build/*-release/debug/
+# A build-number release gets its commits: those since the previous build's
+# tag, which Sentry reads from GitHub. A "Fixes ROSELLAVIEW-…" line in one of
+# them resolves that issue in this release; without them it's only referenced.
+if [ "$RELEASE" = "rosellaview@$BUILD_NUMBER" ]; then
+  PREV_SHA=$(git -C "$ROOT" ls-remote origin "refs/tags/$((BUILD_NUMBER - 1))^{}" | cut -f1 || true)
+  if [ -n "$PREV_SHA" ]; then
+    $SENTRY_CLI releases --org "$ORG" --project "$PROJECT" set-commits "$RELEASE" \
+      --commit "regulad/RosellaView@$PREV_SHA..$(git -C "$ROOT" rev-parse HEAD)"
+  else
+    echo "== no tag $((BUILD_NUMBER - 1)) on origin: $RELEASE gets no commits" >&2
+  fi
+fi
 $SENTRY_CLI releases --org "$ORG" --project "$PROJECT" finalize "$RELEASE"
 else
   echo "== Sentry upload skipped (SENTRY_UPLOAD=0)"
