@@ -10,6 +10,7 @@
 
 #include <errno.h>
 #include <inttypes.h>
+#include <locale.h>
 #include <math.h>
 #include <pthread.h>
 #include <stdarg.h>
@@ -177,6 +178,25 @@ static char *json_escape(const char *s) {
     return out;
 }
 
+/* JSON numbers take a '.', but printf follows LC_NUMERIC, and the app runs in
+ * the TV's locale: in a French or German one, "%.2f" writes "12,50", and
+ * JSON.parse throws on it, which kills the app. So JSON is formatted with the
+ * calling thread switched to the C locale, until c_locale_pop(). */
+static locale_t g_c_locale;
+static pthread_once_t g_c_locale_once = PTHREAD_ONCE_INIT;
+
+static void c_locale_init(void) { g_c_locale = newlocale(LC_ALL_MASK, "C", (locale_t)0); }
+
+/* Returns the thread's locale before, for c_locale_pop(). */
+static locale_t c_locale_push(void) {
+    pthread_once(&g_c_locale_once, c_locale_init);
+    return g_c_locale ? uselocale(g_c_locale) : (locale_t)0;
+}
+
+static void c_locale_pop(locale_t prev) {
+    if (prev) uselocale(prev);
+}
+
 static void emit_json(char *json, int crumb) {
     if (!json) return;
     if (crumb) rv_sentry_breadcrumb("receiver", json);
@@ -191,9 +211,11 @@ static void emit_json(char *json, int crumb) {
 static void emit(const char *fmt, ...) {
     va_list ap;
     char *json = NULL;
+    locale_t loc = c_locale_push();
     va_start(ap, fmt);
     if (vasprintf(&json, fmt, ap) < 0) json = NULL;
     va_end(ap);
+    c_locale_pop(loc);
     emit_json(json, 1);
 }
 
@@ -203,9 +225,11 @@ static void emit_private(const char *fmt, ...) __attribute__((format(printf, 1, 
 static void emit_private(const char *fmt, ...) {
     va_list ap;
     char *json = NULL;
+    locale_t loc = c_locale_push();
     va_start(ap, fmt);
     if (vasprintf(&json, fmt, ap) < 0) json = NULL;
     va_end(ap);
+    c_locale_pop(loc);
     emit_json(json, 0);
 }
 
@@ -503,6 +527,7 @@ char *receiver_native_video_json(void) {
     struct timespec now;
     double sender_ms = 0;
     char *json = NULL;
+    locale_t loc;
     int on;
     pthread_mutex_lock(&g_consumer_lock);
     on = g_consumer_on;
@@ -519,6 +544,7 @@ char *receiver_native_video_json(void) {
         if (since > 50000000ull) since = 50000000ull;
         sender_ms = (double)(st.shown_sender_ns + since) / 1e6;
     }
+    loc = c_locale_push();
     if (asprintf(&json,
                  "{\"attached\":%s,\"sender_ms\":%.3f,\"latency_ms\":%d,\"decoded\":%" PRIu64 ",\"shown\":%" PRIu64
                  ",\"skipped\":%" PRIu64 ",\"late\":%" PRIu64 ",\"errors\":%" PRIu64 ",\"starts\":%" PRIu64
@@ -526,6 +552,7 @@ char *receiver_native_video_json(void) {
                  on ? "true" : "false", sender_ms, atomic_load(&g_native_latency_ms), st.decoded, st.shown, st.skipped,
                  st.late, st.errors, st.starts, st.width, st.height, st.queued, st.upload_ms) < 0)
         json = NULL;
+    c_locale_pop(loc);
     return json;
 }
 
@@ -1084,6 +1111,7 @@ char *receiver_stats_json(void) {
     char *json = NULL;
     uint64_t keyframes = 0, concealed = 0;
     char sys[768];
+    locale_t loc = c_locale_push();
     pthread_mutex_lock(&g_mux_lock);
     if (g_mux) keyframes = fmp4_keyframes(g_mux);
     keyframes += atomic_load(&g_native_keyframes);
@@ -1120,5 +1148,6 @@ char *receiver_stats_json(void) {
                  atomic_load(&g_audio_ct), concealed * 1000 / 44100, keyframes, proc_kb("/proc/self/status", "VmRSS"),
                  proc_kb("/proc/self/status", "VmHWM"), sys) < 0)
         json = NULL;
+    c_locale_pop(loc);
     return json;
 }
